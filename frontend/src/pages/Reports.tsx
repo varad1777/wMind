@@ -56,9 +56,19 @@ export default function Reports() {
   }, []);
 
   // Load requested reports on mount
-  useEffect(() => {
+useEffect(() => {
+  
+  fetchRequestedReports();
+
+  // Call every 5 seconds
+  const intervalId = setInterval(() => {
     fetchRequestedReports();
-  }, []);
+  }, 5000);
+
+  // Cleanup on unmount
+  return () => clearInterval(intervalId);
+}, []);
+
 
   // Get signals for selected asset
   const getSignalsOnAsset = async (selectedID) => {
