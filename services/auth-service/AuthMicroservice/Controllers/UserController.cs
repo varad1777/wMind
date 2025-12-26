@@ -220,6 +220,7 @@ namespace AuthMicroservice.Controllers
             }
         }
 
+        [AllowAnonymous]
         [HttpPost("refresh-token")]
         public async Task<IActionResult> RefreshToken()
         {
