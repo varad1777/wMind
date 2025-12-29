@@ -28,4 +28,5 @@ export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   "/map-device-to-asset/:assetid": ["Admin", "Engineer"],
   "/Asset/BulkUpload": ["Admin", "Engineer"],
   "/Asset/Alerts/:assetId": ["Admin", "Engineer", "Operator"],
+  "/forbidden": ["Admin", "Engineer", "Operator", "User"],
 };

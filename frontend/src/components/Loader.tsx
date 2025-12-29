@@ -1,12 +1,20 @@
 // src/components/PageLoader.tsx
 import React from "react";
-
+import { useLocation } from "react-router-dom";
 type PageLoaderProps = {
   isVisible: boolean;
 };
 
 const PageLoader: React.FC<PageLoaderProps> = ({ isVisible }) => {
-  const text = "TMind.co.in";
+  const location = useLocation();
+
+  // ❌ Do NOT show loader on forbidden / not-found cases
+  const disableLoader =
+    location.pathname === "/forbidden" ||
+    location.pathname === "/404";
+
+  if (!isVisible || disableLoader) return null;
+  const text = "tmind.wonderbiz.org";
 
   return (
     <div

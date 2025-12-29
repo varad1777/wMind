@@ -401,7 +401,7 @@ export default function Signals() {
 
 
     return (
-      <div className="bg-white p-4 border border-gray-300 rounded shadow-lg max-w-md">
+      <div className="rounded-lg border border-border bg-card p-4 text-card-foreground shadow-lg">
         <p className="font-semibold mb-2">{format(new Date(label), "MMM dd HH:mm:ss")}</p>
        
         {payload.map((entry: any, index: number) => {
@@ -433,18 +433,18 @@ export default function Signals() {
              
               <div className="ml-5 mt-1 space-y-1 text-sm">
                 <div>
-                  <span className="text-gray-600">Current: </span>
+                  <span className="text-muted-foreground">Current:</span>
                   <span className="font-semibold">{currentValue?.toFixed(2)}</span>
                 </div>
                
                 {refValue != null && (
                   <>
                     <div>
-                      <span className="text-gray-600">Reference: </span>
+                      <span className="text-muted-foreground">Reference: </span>
                       <span className="font-semibold">{refValue.toFixed(2)}</span>
                     </div>
                     <div>
-                      <span className="text-gray-600">Difference: </span>
+                      <span className="text-muted-foreground">Difference: </span>
                       <span
                         className={`font-semibold ${
                           difference > 0 ? "text-green-600" : difference < 0 ? "text-red-600" : ""
@@ -455,7 +455,7 @@ export default function Signals() {
                       </span>
                     </div>
                     <div>
-                      <span className="text-gray-600">Change: </span>
+                      <span className="text-muted-foreground">Change: </span>
                       <span
                         className={`font-semibold ${
                           parseFloat(percentChange) > 0
@@ -477,7 +477,7 @@ export default function Signals() {
         })}
        
         {referencePoint && (
-          <p className="text-xs text-gray-500 mt-2 pt-2 border-t">
+          <p className="mt-2 border-t pt-2 text-xs text-muted-foreground">
             Reference Point: {format(new Date(referencePoint.time), "MMM dd HH:mm:ss")}
           </p>
         )}
@@ -529,13 +529,13 @@ export default function Signals() {
 
   /* ---------------------------- JSX ---------------------------- */
   return (
-    <div className="p-4 space-y-6">
+    <div className="p-4 container space-y-6 bg-background text-foreground">
       {/* PAGE TITLE */}
       <h1 className="text-2xl font-bold">Signal Analysis</h1>
 
 
       {/* TIME RANGE SECTION */}
-      <Card>
+      <Card className="tour-time-range">
         <CardHeader>
           <CardTitle>Time Range</CardTitle>
         </CardHeader>
@@ -543,7 +543,7 @@ export default function Signals() {
           <select
             value={timeRange}
             onChange={e => setTimeRange(e.target.value as any)}
-            className="border p-2 rounded w-full"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <option value="24h">Last 24 Hours</option>
             <option value="7d">Last 7 Days</option>
@@ -589,7 +589,7 @@ export default function Signals() {
                 onChange={e =>
                   setMainAsset(allAssets.find(a => a.assetId === e.target.value) ?? null)
                 }
-                className="border p-2 rounded w-full"
+               className="tour-main-asset-dropdown w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="">--Select Asset--</option>
                 {allAssets.map(a => (
@@ -611,7 +611,10 @@ export default function Signals() {
                 value={selectedSignals.map(s => s.signalTypeId)}
                 onChange={handleMainSignalChange}
                 disabled={!mainSignals.length}
-                className="border p-2 rounded w-full h-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                size={4}
+                className="tour-main-signals w-full rounded-md border border-border bg-background
+             px-3 py-2 text-sm text-foreground
+             focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 {mainSignals.length === 0 ? (
                   <option disabled>No signals available</option>
@@ -624,7 +627,7 @@ export default function Signals() {
                 )}
               </select>
               {selectedSignals.length > 0 && (
-                <p className="text-sm text-gray-600 mt-2">
+                <p className="text-sm text-muted-foreground mt-2">
                   Selected: {selectedSignals.map(s => s.signalName).join(", ")}
                 </p>
               )}
@@ -633,8 +636,8 @@ export default function Signals() {
 
             {/* Device */}
             <div>
-              <label className="block mb-2 font-semibold">Assigned Device:</label>
-              <p className="text-gray-700">{deviceName ? deviceName.split(",").map((d, idx) => <span key={idx}>{d}</span>) : "Not Assigned"}</p>
+              <label className="tour-main-device block mb-2 font-semibold">Assigned Device:</label>
+              <p className="text-foreground">{deviceName ? deviceName.split(",").map((d, idx) => <span key={idx}>{d}</span>) : "Not Assigned"}</p>
             </div>
           </CardContent>
         </Card>
@@ -655,7 +658,7 @@ export default function Signals() {
                   value={compareAssetId}
                   onChange={e => setCompareAssetId(e.target.value)}
                   disabled={!mainAsset}
-                  className="border p-2 rounded w-full"
+                  className="tour-compare-dropdown w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   <option value="">None</option>
                   {allAssets
@@ -682,7 +685,8 @@ export default function Signals() {
                     value={compareSelectedSignals.map(s => s.signalTypeId)}
                     onChange={handleCompareSignalChange}
                     disabled={!compareSignals.length}
-                    className="border p-2 rounded w-full h-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    size={4}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus :ring-2 focus:ring-blue-500"
                   >
                     {compareSignals.length === 0 ? (
                       <option disabled>No signals available</option>
@@ -695,7 +699,7 @@ export default function Signals() {
                     )}
                   </select>
                   {compareSelectedSignals.length > 0 && (
-                    <p className="text-sm text-gray-600 mt-2">
+                    <p className="text-sm text-muted-foreground mt-2">
                       Selected: {compareSelectedSignals.map(s => s.signalName).join(", ")}
                     </p>
                   )}
@@ -705,7 +709,7 @@ export default function Signals() {
                 {/* Device */}
                 <div>
                   <label className="block mb-2 font-semibold">Assigned Device:</label>
-                  <p className="text-gray-700">
+                  <p className="text-foreground">
                     {compareDeviceName
                       ? compareDeviceName.split(",").map((d, idx) => <span key={idx}>{d}</span>)
                       : "Not Assigned"}
@@ -719,19 +723,20 @@ export default function Signals() {
 
 
       {/* GRAPH CARD */}
-      <Card>
+      <Card className="tour-graph-card">
         <CardHeader>
           <CardTitle>Signals Graph</CardTitle>
           {fetchingData && <p className="text-sm text-gray-500">Loading data...</p>}
         </CardHeader>
-        <CardContent>
+        <CardContent className="bg-card text-card-foreground">
           {fetchingData ? (
             <div className="flex justify-center items-center h-96">
               <p className="text-lg">Loading telemetry data...</p>
             </div>
           ) : fullTelemetryData.length === 0 ? (
-            <div className="flex justify-center items-center h-96 bg-gray-50 rounded">
-              <p className="text-lg text-gray-600">No data available. Please select an asset and signals.</p>
+            <div className="flex h-96 items-center justify-center rounded-lg border border-border bg-card">
+                <p className="text-lg text-muted-foreground">
+                No data available. Please select an asset and signals.</p>
             </div>
           ) : (
             <>
@@ -760,14 +765,14 @@ export default function Signals() {
                 </div>
                
                 {referencePoint && (
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded">
+                  <div className="rounded-md border border-primary/30 bg-primary/10 p-3">
                     <p className="font-semibold text-sm">
                       Reference Point: {format(new Date(referencePoint.time), "MMM dd HH:mm:ss")}
                     </p>
                     <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
                       {Object.entries(referencePoint.values).map(([key, value]) => (
                         <div key={key} className="flex justify-between">
-                          <span className="text-gray-600">{key}:</span>
+                          <span className="text-muted-foreground">{key}:</span>
                           <span className="font-semibold">{value.toFixed(2)}</span>
                         </div>
                       ))}
@@ -776,14 +781,14 @@ export default function Signals() {
                 )}
                
                 {isSelectingReference && (
-                  <div className="p-3 bg-green-50 border border-green-200 rounded">
+                  <div className="rounded-md border border-primary/30 bg-primary/10 text-primary">
                     <p className="text-sm font-semibold text-green-800">
                       🎯 Click on any point in the chart below to set as reference
                     </p>
                   </div>
                 )}
                
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-muted-foreground">
                   {isSelectingReference
                     ? "Click on the chart to set reference point"
                     : "Drag on chart to zoom into a time range"}

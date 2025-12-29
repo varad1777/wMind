@@ -120,7 +120,7 @@ export default function Dashboard() {
 
   if (error) return <div className="text-center text-red-600">{error}</div>;
 
-  const activeDevices = totalDevices - deletedDevices;
+  const activeDevices = totalDevices ;
   const uptime = 99.8;
   const efficiency = 94.2;
 
@@ -152,7 +152,7 @@ export default function Dashboard() {
           {isAdmin ? (
             <KPICard title="Active Devices" value={activeDevices} icon={<Cpu className="w-6 h-6" />} status={`${deletedDevices} offline`} borderColor="border-green-400" />
           ) : (
-            <KPICard title="Active Devices" value={totalDevices} icon={<Cpu className="w-6 h-6" />} borderColor="border-green-400" />
+            <KPICard title="Active Devices" value={deletedDevices} icon={<Cpu className="w-6 h-6" />} borderColor="border-green-400" />
           )}
         </div>
         <div id="kpi-alerts">

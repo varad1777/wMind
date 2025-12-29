@@ -2,6 +2,7 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { ROUTE_PERMISSIONS } from "./routePermissions";
+import ForbiddenRedirect from "@/pages/ForbiddenRedirect";
 
 function matchRoute(pathname: string) {
   return Object.keys(ROUTE_PERMISSIONS).find((route) =>
@@ -27,7 +28,7 @@ export default function ProtectedRoute({
     : [];
 
   if (!allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />;
+  return <Navigate to="/forbidden" replace />;
   }
 
   return children;

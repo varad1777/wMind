@@ -28,6 +28,8 @@ import AssetBulkUpload from "./asset/UploadAssetCsv";
 import Notifications from "./pages/Notifications";
 import AlertsPage from "./pages/Alerts";
 import ProtectedRoute from "./config/ProtectedRoute";
+import NotFound from "./pages/NotFound";
+import ForbiddenRedirect from "./pages/ForbiddenRedirect";
 
 export default function App() {
   const [showLoader, setShowLoader] = useState(true);
@@ -50,8 +52,9 @@ export default function App() {
     <TooltipProvider>
       
         <ToastContainer position="top-right" autoClose={2000} theme="light" />
-        <PageLoader isVisible={showLoader} /> {/* <- mounted at app root so it shows on any full-page load */}
+        {/* <PageLoader isVisible={showLoader} /> <- mounted at app root so it shows on any full-page load */}
         <Router>
+          <PageLoader isVisible={showLoader} />
           <Routes>
             <Route path="/" element={<Login />} />
 
@@ -81,10 +84,12 @@ export default function App() {
               <Route path="/map-device-to-asset/:assetid" element={<Map_Device_To_Asset />} />
               <Route path="Asset/BulkUpload" element={<AssetBulkUpload/>} />
               <Route path="Asset/Alerts/:assetId" element={<AlertsPage/>} />
+              <Route path="/forbidden" element={<ForbiddenRedirect />} />
               
             </Route>
 
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<NotFound />} />
+
           </Routes>
         </Router>
     </TooltipProvider>

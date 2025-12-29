@@ -6,12 +6,8 @@ import { Calendar as CalendarIcon, FileText, Download, RefreshCw } from "lucide-
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
-import { getAssetHierarchy, getAssetConfig, getSignalOnAsset } from "@/api/assetApi";
+import { getAssetHierarchy, getAssetConfig, getSignalOnAsset,getRequestedReports,requestAssetReport,downloadAssetReport } from "@/api/assetApi";
 import { getDeviceById } from "@/api/deviceApi";
-import type { Asset } from "@/api/assetApi";
-
-// API Base URL - adjust this to your backend URL
-const API_BASE_URL = "/api/asset"
 
 export default function Reports() {
   const [startDate, setStartDate] = useState("");
@@ -56,19 +52,9 @@ export default function Reports() {
   }, []);
 
   // Load requested reports on mount
-useEffect(() => {
-  
-  fetchRequestedReports();
-
-  // Call every 5 seconds
-  const intervalId = setInterval(() => {
+  useEffect(() => {
     fetchRequestedReports();
-  }, 5000);
-
-  // Cleanup on unmount
-  return () => clearInterval(intervalId);
-}, []);
-
+  }, []);
 
   // Get signals for selected asset
   const getSignalsOnAsset = async (selectedID) => {
@@ -102,106 +88,102 @@ useEffect(() => {
 
   // Fetch all requested reports
   const fetchRequestedReports = async () => {
-    setIsLoadingReports(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/Reports`);
-      if (!response.ok) throw new Error("Failed to fetch reports");
-      const data = await response.json();
-      setRequestedReports(data);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to load report history");
-    } finally {
-      setIsLoadingReports(false);
-    }
-  };
+  setIsLoadingReports(true);
+  try {
+    const data = await getRequestedReports();
+    setRequestedReports(data);
+  } catch (err) {
+    console.error(err);
+    toast.error(err.message || "Failed to load report history");
+  } finally {
+    setIsLoadingReports(false);
+  }
+};
+
 
   // Request a new report generation
-  const requestReport = async () => {
-    // Validation
-    if (!selectedAssetId) {
-      toast.error("Please select an asset");
-      return;
-    }
-    if (selectedSignalIds.length === 0) {
-      toast.error("Please select at least one signal");
-      return;
-    }
-    if (!startDate || !endDate) {
-      toast.error("Please select both start and end dates");
-      return;
-    }
+ const requestReport = async () => {
+  if (!selectedAssetId) {
+    toast.error("Please select an asset");
+    return;
+  }
+  if (selectedSignalIds.length === 0) {
+    toast.error("Please select at least one signal");
+    return;
+  }
+  if (!startDate || !endDate) {
+    toast.error("Please select both start and end dates");
+    return;
+  }
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    
-    if (end < start) {
-      toast.error("End date cannot be earlier than start date");
-      return;
-    }
+  const start = new Date(startDate);
+  const end = new Date(endDate);
 
-    const daysDiff = (end - start) / (1000 * 60 * 60 * 24);
-    if (daysDiff > 31) {
-      toast.error("Date range cannot exceed 31 days");
-      return;
-    }
+  if (end < start) {
+    toast.error("End date cannot be earlier than start date");
+    return;
+  }
 
-    try {
-      const requestBody = {
-        assetID: selectedAssetId,
-        signalIDs: selectedSignalIds,
-        startDate: new Date(startDate).toISOString(),
-        endDate: new Date(endDate).toISOString(),
-        reportFormat: reportFormat
-      };
+  const daysDiff =
+    (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
 
-      const response = await fetch(`${API_BASE_URL}/Reports/ReportRequest`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
+  if (daysDiff > 31) {
+    toast.error("Date range cannot exceed 31 days");
+    return;
+  }
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to request report");
-      }
+  try {
+    await requestAssetReport({
+      assetID: selectedAssetId,
+      signalIDs: selectedSignalIds,
+      startDate: start.toISOString(),
+      endDate: end.toISOString(),
+      reportFormat,
+    });
 
-      toast.success("Report requested successfully! Processing...");
-      
-      // Refresh the reports list after a short delay
-      setTimeout(() => {
-        fetchRequestedReports();
-      }, 2000);
-    } catch (err) {
-      console.error(err);
-      toast.error(err.message || "Failed to request report");
-    }
-  };
+    toast.success("Report requested successfully! Processing...");
+    setTimeout(fetchRequestedReports, 2000);
+  } catch (err: any) {
+    console.error(err);
+    toast.error(err.message || "Failed to request report");
+  }
+};
+
 
   // Download a specific report
-  const downloadReport = async (reportId, fileName) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/Reports/download/${reportId}`);
-      if (!response.ok) throw new Error("Failed to download report");
+  const downloadReport = async (reportId: string, fileName: string) => {
+  try {
+    const blob = await downloadAssetReport(reportId);
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
 
-      toast.success("Report downloaded successfully!");
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to download report");
-    }
-  };
+    document.body.appendChild(a);
+    a.click();
+
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+
+    toast.success("Report downloaded successfully!");
+  } catch (err: any) {
+    console.error(err);
+    toast.error(err.message || "Failed to download report");
+  }
+};
+
+const formatToIST = (utcDate) =>
+  new Date(utcDate + "Z").toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
 
   // Toggle signal selection
   const toggleSignalSelection = (signalId) => {
@@ -264,7 +246,7 @@ useEffect(() => {
             <label className="block text-sm font-medium mb-2">Start Date</label>
             <Popover open={startDateOpen} onOpenChange={setStartDateOpen}>
               <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full justify-start">
+                <Button variant="outline" className="report-start-date w-full justify-start">
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {startDate ? format(new Date(startDate), "PPP") : "Choose start date"}
                 </Button>
@@ -290,7 +272,7 @@ useEffect(() => {
             <label className="block text-sm font-medium mb-2">End Date</label>
             <Popover open={endDateOpen} onOpenChange={setEndDateOpen}>
               <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full justify-start">
+                <Button variant="outline" className="report-end-date w-full justify-start">
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {endDate ? format(new Date(endDate), "PPP") : "Choose end date"}
                 </Button>
@@ -319,7 +301,7 @@ useEffect(() => {
             <label className="block text-sm font-medium mb-2">Asset *</label>
             <Button
               variant="outline"
-              className="w-full justify-between"
+              className="report-asset w-full justify-between"
               onClick={() => setAssetDropdownOpen(!assetDropdownOpen)}
             >
               {selectedAssetId
@@ -360,7 +342,7 @@ useEffect(() => {
             </label>
             <Button
               variant="outline"
-              className="w-full justify-between"
+              className="report-signal w-full justify-between"
               onClick={() => setSignalDropdownOpen(!signalDropdownOpen)}
               disabled={!selectedAssetId}
             >
@@ -391,7 +373,7 @@ useEffect(() => {
 
           {/* DEVICE INFO */}
           <div>
-            <label className="block text-sm font-medium mb-2">Assigned Device</label>
+            <label className="report-device block text-sm font-medium mb-2">Assigned Device</label>
             <div className="p-2 bg-gray-50 dark:bg-gray-900 rounded border">
               {assignedDeviceName}
             </div>
@@ -403,7 +385,7 @@ useEffect(() => {
             <select
               value={reportFormat}
               onChange={(e) => setReportFormat(e.target.value)}
-              className="w-full p-2 border rounded-md dark:bg-gray-700"
+              className="report-format w-full p-2 border rounded-md dark:bg-gray-700"
             >
               <option value="excel">Excel/CSV</option>
              
@@ -413,7 +395,7 @@ useEffect(() => {
 
         {/* GENERATE BUTTON */}
         <div className="flex justify-end">
-          <Button onClick={requestReport} className="bg-blue-600 hover:bg-blue-700">
+          <Button onClick={requestReport} className="request-report-btn bg-blue-600 hover:bg-blue-700">
             <FileText className="mr-2 h-4 w-4" />
             Request Report
           </Button>
@@ -423,7 +405,7 @@ useEffect(() => {
       {/* REQUESTED REPORTS TABLE */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
         <div className="p-6 border-b flex justify-between items-center">
-          <h2 className="text-xl font-semibold">Requested Reports</h2>
+          <h2 className="requested-reports text-xl font-semibold">Requested Reports</h2>
           <Button
             variant="outline"
             size="sm"
@@ -466,7 +448,8 @@ useEffect(() => {
                     <td className="px-6 py-4 text-sm">{report.fileName}</td>
                     <td className="px-6 py-4 text-sm">{report.assetName}</td>
                     <td className="px-6 py-4 text-sm">
-                      {new Date(report.requestedAt).toLocaleString()}
+                      {/* {new Date(report.requestedAt).toLocaleString()} */}
+                      {formatToIST(report.requestedAt)}
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(report.status)}`}>

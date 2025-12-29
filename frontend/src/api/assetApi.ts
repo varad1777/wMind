@@ -303,3 +303,46 @@ export const acknowledgeNotification = async (id: string) => {
   }
 };
 
+
+// Report 
+export const getRequestedReports = async () => {
+  try {
+    const response = await apiAsset.get("/Reports");
+    return response.data;
+  } catch (err) {
+    throw handleApiError(err, "Failed to fetch report history");
+  }
+};
+
+
+export const requestAssetReport = async (payload: {
+  assetID: string;
+  signalIDs: string[];
+  startDate: string;
+  endDate: string;
+  reportFormat: string;
+}) => {
+  try {
+    await apiAsset.post("/Reports/ReportRequest", payload);
+  } catch (err) {
+    throw handleApiError(err, "Failed to request report");
+  }
+};
+
+
+export const downloadAssetReport = async (reportId: string) => {
+  try {
+    const response = await apiAsset.get(
+      `/Reports/download/${reportId}`,
+      {
+        responseType: "blob", // IMPORTANT
+      }
+    );
+
+    return response.data;
+  } catch (err) {
+    throw handleApiError(err, "Failed to download report");
+  }
+};
+
+
