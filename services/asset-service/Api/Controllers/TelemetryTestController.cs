@@ -178,7 +178,21 @@ namespace WebAPI.Controllers
 
             return Ok("Backfill started. It may take a few minutes to complete.");
         }
-
+        
+         [HttpPost("queryraw")]
+        public async Task<IActionResult> GetRawTelemetry([FromBody] TelemetryRequestDto request)
+        {
+            try
+            {
+                // Directly call the Raw data method
+                var result = await _TelementryService.GetRawData(request); 
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
 
         //[HttpPost("ReportRequest")]
         //public async Task<IActionResult> GenerateReport([FromBody] RequestReport dto)
