@@ -21,7 +21,7 @@ type Msg = {
 export default function AiRcaChat() {
   const [prompt, setPrompt] = useState("");
   const [system, setSystem] = useState("You are an industrial RCA assistant.");
-  const [messages, setMessages] = useState<Msg[]>([{id: String(Date.now()) + "-u", role: "assistant", fullText: "", displayedText: "hello! I am TMind Assistant, How can I Assist You today?" }]);
+  const [messages, setMessages] = useState<Msg[]>([{ id: String(Date.now()) + "-u", role: "assistant", fullText: "", displayedText: "hello! I am TMind Assistant, How can I Assist You today?" }]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
@@ -91,84 +91,84 @@ export default function AiRcaChat() {
     return out;
   }
 
- 
-async function sendPrompt() {
-  if (!user) {
-    return navigate("/");
-  }
 
-  setError(null);
-  const userText = prompt.trim();
-  if (!userText) return;
+  async function sendPrompt() {
+    if (!user) {
+      return navigate("/");
+    }
 
-  const userMsg: Msg = {
-    id: String(Date.now()) + "-u",
-    role: "user",
-    fullText: userText,
-    displayedText: userText,
-  };
+    setError(null);
+    const userText = prompt.trim();
+    if (!userText) return;
 
-  setMessages((m) => [...m, userMsg]);
-
-  setLoading(true);
-  setPrompt("");
-
-  try {
-    const res = await AiApi.post(
-      "/ai/ask",
-      {
-        prompt: userText,
-        system,
-        sessionId: user.username,
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    const data = res.data;
-
-    // Same fallback logic as your fetch version
-    const raw =
-      (data &&
-        (data.data ||
-          data.result ||
-          data.answer ||
-          data.response ||
-          data.rca ||
-          data.message)) ??
-      JSON.stringify(data);
-
-    const text = typeof raw === "string" ? raw : JSON.stringify(raw);
-
-    const assistantMsg: Msg = {
-      id: String(Date.now()) + "-a",
-      role: "assistant",
-      fullText: text,
-      displayedText: "",
+    const userMsg: Msg = {
+      id: String(Date.now()) + "-u",
+      role: "user",
+      fullText: userText,
+      displayedText: userText,
     };
 
-    setMessages((m) => [...m, assistantMsg]);
+    setMessages((m) => [...m, userMsg]);
 
-    // Start typing animation
-    startTyping(assistantMsg.id, text);
-  } catch (err: any) {
-    console.error(err);
+    setLoading(true);
+    setPrompt("");
 
-    // Axios error handling
-    const message =
-      err.response?.data?.message ||
-      err.response?.statusText ||
-      err.message ||
-      "Unknown error";
+    try {
+      const res = await AiApi.post(
+        "/ai/ask",
+        {
+          prompt: userText,
+          system,
+          sessionId: user.username,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-    setError(message);
-  } finally {
-    setLoading(false);
+      const data = res.data;
+
+      // Same fallback logic as your fetch version
+      const raw =
+        (data &&
+          (data.data ||
+            data.result ||
+            data.answer ||
+            data.response ||
+            data.rca ||
+            data.message)) ??
+        JSON.stringify(data);
+
+      const text = typeof raw === "string" ? raw : JSON.stringify(raw);
+
+      const assistantMsg: Msg = {
+        id: String(Date.now()) + "-a",
+        role: "assistant",
+        fullText: text,
+        displayedText: "",
+      };
+
+      setMessages((m) => [...m, assistantMsg]);
+
+      // Start typing animation
+      startTyping(assistantMsg.id, text);
+    } catch (err: any) {
+      console.error(err);
+
+      // Axios error handling
+      const message =
+        err.response?.data?.message ||
+        err.response?.statusText ||
+        err.message ||
+        "Unknown error";
+
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
   }
-}
 
   function startTyping(msgId: string, fullText: string) {
     // conservative typing speed
@@ -332,7 +332,12 @@ async function sendPrompt() {
                     {m.role === "assistant" ? (
                       // show the typing (displayedText) but parse from fullText for structured UI
                       <div className="prose prose-sm">
-                        <div className="whitespace-pre-wrap text-sm">{m.displayedText}</div>
+                        <div
+                          className="whitespace-pre-wrap text-sm"
+                          dangerouslySetInnerHTML={{
+                            __html: m.displayedText ? m.displayedText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>') : "",
+                          }}
+                        />
 
                       </div>
                     ) : (
@@ -415,7 +420,7 @@ async function sendPrompt() {
                 <span className="text-blue-600 font-bold">•</span>
                 <span>Be specific about assets and time windows</span>
               </li>
-             
+
             </ul>
           </div>
 

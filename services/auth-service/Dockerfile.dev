@@ -1,0 +1,11 @@
+FROM mcr.microsoft.com/dotnet/sdk:9.0
+
+WORKDIR /app
+
+ENV ASPNETCORE_ENVIRONMENT=Development
+ENV ASPNETCORE_URLS=http://0.0.0.0:5001
+ENV DOTNET_USE_POLLING_FILE_WATCHER=1
+
+EXPOSE 5001
+
+CMD ["dotnet", "watch", "--project", "AuthMicroservice/AuthMicroservice.csproj", "run", "--no-launch-profile"]

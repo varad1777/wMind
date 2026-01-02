@@ -23,7 +23,7 @@ services:
       - "1433:1433"
     networks: [tmind-net]
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P '${SA_PASSWORD}' -Q 'SELECT 1' || exit 1"]
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/1433' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -68,7 +68,11 @@ services:
       - qdrant:/qdrant/storage
     networks: [tmind-net]
     healthcheck:
-      test: ["CMD-SHELL", "echo > /dev/tcp/localhost/6333 || exit 1"]
+      test:
+        - CMD
+        - /bin/bash
+        - -c
+        - "echo > /dev/tcp/127.0.0.1/6333" 
       interval: 10s
       timeout: 5s
       retries: 10
@@ -79,8 +83,6 @@ services:
     build: ./services/auth-service
     ports:
       - "5001"
-    depends_on:
-      - tmind-sql
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__AuthDbConnection: >
@@ -92,6 +94,9 @@ services:
       Jwt__Key: ${JWT_KEY}
       Jwt__Issuer: AssetNodeAPI
       Jwt__Audience: AssetNodeClient
+    depends_on:
+      tmind-sql:
+        condition: service_healthy
     networks: [tmind-net]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://auth-service:5001/health"]
@@ -104,8 +109,10 @@ services:
     ports:
       - "5002"
     depends_on:
-      - tmind-sql
-      - rabbitmq
+      tmind-sql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__DeviceDbConnection: >
@@ -139,9 +146,12 @@ services:
     ports:
       - "5003"
     depends_on:
-      - tmind-sql
-      - rabbitmq
-      - influxdb
+      tmind-sql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__AssetDbConnection: >

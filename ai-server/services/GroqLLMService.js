@@ -13,6 +13,7 @@ Rules:
 - Explain in simple, clear, professional language.
 - Do NOT return JSON.
 - Always structure the response as:
+- return the Recommended actions in bold 
 
 1. What happened
 2. Why it happened
