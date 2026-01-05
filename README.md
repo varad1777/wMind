@@ -54,40 +54,8 @@ Manufacturing environments often suffer from:
 
 WMIND follows a **distributed microservice architecture** to ensure scalability, reliability, and loose coupling. 
 
-```
-┌─────────────┐
-│ Web Client  │
-│  (React)    │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────────────────────────────────┐
-│         API Gateway / Load Balancer      │
-└──────────┬──────────────────────┬────────┘
-           │                      │
-    ┌──────▼────────┐    ┌────────▼──────────┐
-    │ Device Service │    │ Asset Service     │
-    │  (.NET Core)   │    │  (.NET Core)      │
-    └──────┬────────┘    └────────┬──────────┘
-           │                      │
-           └──────────┬───────────┘
-                      ▼
-              ┌──────────────────┐
-              │  RabbitMQ (MQ)   │
-              └────┬─────────────┘
-                   │
-        ┌──────────┼──────────┐
-        │          │          │
-    ┌───▼───┐  ┌───▼────┐  ┌─▼──────────┐
-    │InfluxDB  │SQL Server│ │RCA Service │
-    │(Timeseries)│(Metadata)│ │(Node.js)  │
-    └─────────┘  └────────┘  └───────────┘
-                                    │
-                            ┌───────▼────────┐
-                            │ Qdrant Vector  │
-                            │ Database       │
-                            └────────────────┘
-```
+<img width="593" height="727" alt="Architecture hld" src="https://github.com/user-attachments/assets/dc1c0d8e-cecb-41a4-b808-3a90c10222bf" />
+
 
 ### 🔹 **Web Client (React)**
 - Secure user interface
@@ -252,7 +220,7 @@ RABBIT_PASS=guest
 
 # InfluxDB
 INFLUX_ORG=Wonderbiz
-INFLUX_BUCKET=signals
+INFLUX_BUCKET=SignalValueTeleMentry
 
 # LLM API Keys
 GROQ_API_KEY=<your-groq-key>
@@ -286,7 +254,7 @@ docker compose up -d influxdb
 ```env
 INFLUX_TOKEN=<generated-token>
 INFLUX_ORG=Wonderbiz
-INFLUX_BUCKET=signals
+INFLUX_BUCKET=SignalValueTeleMentry
 ```
 
 ### **Step 8: Start All Services**
@@ -299,10 +267,10 @@ docker compose up -d
 
 | Service | URL |
 |---------|-----|
-| 🌐 **Frontend** | http://localhost:3000 |
-| 🔌 **API Gateway** | http://localhost:5000 |
-| 🐰 **RabbitMQ UI** | http://localhost:15672 |
+| 🌐 **Frontend** | http://localhost:5000 |
+| 🐰 **RabbitMQ UI** | http://localhost:15672 | 
 | ⏱️ **InfluxDB UI** | http://localhost:8086 |
+| 📊 **vector DB** | http://localhost:6333 |
 
 ### **Step 10: Verify Containers**
 
