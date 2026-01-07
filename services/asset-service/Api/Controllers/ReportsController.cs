@@ -28,7 +28,7 @@ namespace Api.Controllers
    
 
         [HttpPost("ReportRequest")]
-          [Authorize]
+        [Authorize]
         public async Task<IActionResult> GenerateReport([FromBody] RequestReport dto)
         {
             try

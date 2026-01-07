@@ -19,7 +19,7 @@ namespace Api.Controllers
         }
 
         //adding the configuration means the signals on the asset 
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Engineer")]
         [HttpPost]
        public async Task<IActionResult> AddConfiguration([FromBody] AssetConfigurationDto dto)
         {
@@ -62,7 +62,7 @@ namespace Api.Controllers
             }
         }
 
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Engineer")]
         [HttpPut("{Id}")]
         public async Task<IActionResult> EditSignalsOnAsset(Guid Id,[FromBody] UpdateAssetConfigurationDto Dto)
         {

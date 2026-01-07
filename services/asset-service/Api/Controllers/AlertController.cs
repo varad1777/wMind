@@ -36,7 +36,7 @@ namespace Api.Controllers
 
 
         [HttpPost("analyze-asset")]
-          [Authorize]
+        [Authorize(Roles = "Admin,Engineer,Operator")]
         public async Task<IActionResult> AnalyzeAssetAlerts(
     [FromBody] AnalyzeAssetAlertsRequest request)
         {
@@ -117,7 +117,7 @@ namespace Api.Controllers
 
 
         [HttpGet("asset/{assetId}/pending")]
-          [Authorize]
+        [Authorize(Roles = "Admin,Engineer,Operator")]
         public async Task<IActionResult> GetPendingAlerts(Guid assetId)
         {
             var alerts = await _alertRepo.GetUnAnalyzedByAssetIDAsync(assetId);
@@ -145,7 +145,7 @@ namespace Api.Controllers
 
 
         [HttpGet]
-          [Authorize]
+        [Authorize(Roles = "Admin,Engineer,Operator")]
         public async Task<IActionResult> GetAll([FromQuery] DateTime? fromUtc, [FromQuery] DateTime? toUtc, [FromQuery] Guid assetId)
         {
             var alerts = await _alertRepo.GetAllAsync(fromUtc, toUtc, assetId);
