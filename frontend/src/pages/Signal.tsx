@@ -657,7 +657,7 @@ const zoomOut = () => {
             <option value="custom">Custom Range</option>
           </select>
           {timeRange === "custom" && (
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
               {/* Start Date */}
               <SingleDatePicker
                 value={customStart}

@@ -16,7 +16,7 @@ export default function DashboardLayout() {
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <Sidebar />
+        <Sidebar onCloseSidebar={() => setSidebarOpen(false)} />
       </div>
 
       {/* Mobile overlay */}
