@@ -20,7 +20,7 @@ namespace MappingService.Controllers
 
         // POST api/mapping
         [HttpPost]
-          [Authorize]
+        [Authorize(Roles = "Admin,Engineer")]
         public async Task<IActionResult> CreateMapping([FromBody] CreateMappingDto dto)
         {
             if (dto.AssetId == Guid.Empty || dto.DeviceId == Guid.Empty || dto.DevicePortId == Guid.Empty)
@@ -61,7 +61,7 @@ namespace MappingService.Controllers
         }
 
         [HttpDelete("{AssetId}")]
-          [Authorize]
+        [Authorize(Roles = "Admin,Engineer")]
         public async Task<IActionResult> UnAssignDevicesFromAsset(Guid AssetId)
         {
             try
@@ -75,7 +75,7 @@ namespace MappingService.Controllers
         }
 
         [HttpGet("{assetId}")]
-          [Authorize]
+        [Authorize]
         public async Task<IActionResult> GetConfigOnAsset(Guid assetId)
         {
             try
@@ -88,7 +88,7 @@ namespace MappingService.Controllers
             }
         }
         [HttpDelete("/api/deletemap/{mappingId}")]
-          [Authorize]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteMappingAsync(Guid mappingId)
         {
             try

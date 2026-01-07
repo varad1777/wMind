@@ -54,7 +54,7 @@ namespace WebAPI.Controllers
         }
 
         [HttpGet("{assetId}/{signalTypeId}")]
-          [Authorize]
+        [Authorize(Roles = "Admin,Engineer,Operator")]
         public async Task<IActionResult> GetTelemetrySeries(
             Guid assetId,
             Guid signalTypeId,
@@ -79,6 +79,7 @@ namespace WebAPI.Controllers
 
 
         [HttpPost("query")]
+        [Authorize(Roles = "Admin,Engineer,Operator")]
         public async Task<IActionResult> GetTelemetry([FromBody] TelemetryRequestDto request)
         {
             try
@@ -96,6 +97,7 @@ namespace WebAPI.Controllers
 
 
         [HttpGet("last-hour")]
+        [Authorize(Roles = "Admin,Engineer,Operator")]
         public async Task<IActionResult> GetLastHour(
            [FromQuery] Guid assetId,
            [FromQuery] Guid signalTypeId)
@@ -109,6 +111,7 @@ namespace WebAPI.Controllers
         }
 
         [HttpGet("last-24-hours")]
+        [Authorize(Roles = "Admin,Engineer,Operator")]
         public async Task<IActionResult> GetLast24Hours(
             [FromQuery] Guid assetId,
             [FromQuery] Guid signalTypeId)
@@ -122,6 +125,7 @@ namespace WebAPI.Controllers
         }
 
         [HttpGet("last-7-days")]
+        [Authorize(Roles = "Admin,Engineer,Operator")]
         public async Task<IActionResult> GetLast7Days(
             [FromQuery] Guid assetId,
             [FromQuery] Guid signalTypeId)
@@ -135,6 +139,7 @@ namespace WebAPI.Controllers
         }
 
         [HttpGet("custom-range")]
+        [Authorize(Roles = "Admin,Engineer,Operator")]
         public async Task<IActionResult> GetCustomRange(
             [FromQuery] Guid assetId,
             [FromQuery] Guid signalTypeId,
@@ -154,6 +159,7 @@ namespace WebAPI.Controllers
         // 🔥 BACKWARD COMPATIBLE: Old endpoint
         [HttpGet]
         [Obsolete("Use POST /api/telemetry/query instead")]
+        [Authorize(Roles = "Admin,Engineer,Operator")]
         public async Task<IActionResult> GetTelemetryLegacy(
             [FromQuery] Guid assetId,
             [FromQuery] Guid signalTypeId,
@@ -183,6 +189,7 @@ namespace WebAPI.Controllers
         }
         
          [HttpPost("queryraw")]
+         [Authorize(Roles = "Admin,Engineer,Operator")]
         public async Task<IActionResult> GetRawTelemetry([FromBody] TelemetryRequestDto request)
         {
             try

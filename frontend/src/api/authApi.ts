@@ -24,7 +24,7 @@ api.interceptors.response.use(
       } catch (err) {
         console.log("Refresh token failed, redirecting to login");
         localStorage.removeItem("user");
-        try {
+        try {1
           await api.post("/User/Logout");
         } catch {}
         window.location.href = "/";
