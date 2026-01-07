@@ -372,9 +372,9 @@
             </div>
 
             <div class="button-group">
-                <button class="btn-search" onclick="loadLogs()">🔍 Search & Load</button>
-                <button class="btn-export" onclick="exportData()">📥 Export CSV</button>
-                <button class="btn-reset" onclick="resetFilters()">↻ Reset</button>
+                <button type="button" class="btn-search" onclick="loadLogs(); return false;">🔍 Search & Load</button>
+                <button type="button" class="btn-export" onclick="exportData(); return false;">📥 Export CSV</button>
+                <button type="button" class="btn-reset" onclick="resetFilters(); return false;">↻ Reset</button>
             </div>
         </div>
 
@@ -473,6 +473,7 @@
         }
 
         function filterAndDisplayLogs() {
+            console.log('Filtering logs. Total logs:', allLogs.length);
             const searchQuery = document.getElementById('searchInput').value.toLowerCase();
             const method = document.getElementById('methodFilter').value;
 
@@ -483,19 +484,26 @@
                 return matchesSearch && matchesMethod;
             });
 
+            console.log('Filtered logs:', filteredLogs.length);
             displayLogs();
         }
 
         function displayLogs() {
+            console.log('Displaying logs. Current page:', currentPage, 'Page size:', window.pageSize);
+            
+            if (filteredLogs.length === 0) {
+                console.log('No filtered logs found');
+                document.getElementById('tableContainer').style.display = 'none';
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('messageContainer').innerHTML = '<div class="error-message">No logs found. Try adjusting your search criteria.</div>';
+                return;
+            }
+
             const start = (currentPage - 1) * window.pageSize;
             const end = start + window.pageSize;
             const paginatedLogs = filteredLogs.slice(start, end);
 
-            if (paginatedLogs.length === 0 && filteredLogs.length === 0) {
-                document.getElementById('tableContainer').style.display = 'none';
-                showMessage('No logs found. Try adjusting your search criteria.', 'info');
-                return;
-            }
+            console.log('Paginated logs:', paginatedLogs.length);
 
             const tbody = document.getElementById('logsTable');
             tbody.innerHTML = paginatedLogs.map(log => `
@@ -511,7 +519,9 @@
                 </tr>
             `).join('');
 
+            document.getElementById('messageContainer').innerHTML = '';
             document.getElementById('tableContainer').style.display = 'block';
+            document.getElementById('loading').style.display = 'none';
             updatePagination();
         }
 
@@ -656,9 +666,21 @@
 
         // Load logs on page load - DISABLED to prevent continuous API calls
         // User must manually click "Search & Load" button
+        let pageLoaded = false;
         window.addEventListener('load', () => {
-            clearMessage();
-            showMessage('👋 Click "Search & Load" button to fetch logs from the API', 'info');
+            if (!pageLoaded && allLogs.length === 0) {
+                clearMessage();
+                showMessage('👋 Click "Search & Load" button to fetch logs from the API', 'info');
+                pageLoaded = true;
+            }
+        });
+
+        // Prevent form submission on Enter key
+        document.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && (e.target.id === 'searchInput')) {
+                e.preventDefault();
+                loadLogs();
+            }
         });
     </script>
 </body>
