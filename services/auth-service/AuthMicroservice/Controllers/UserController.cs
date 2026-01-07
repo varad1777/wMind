@@ -9,6 +9,7 @@ using System.Net.WebSockets;
 using Microsoft.EntityFrameworkCore;
 using AuthMicroservice.Infrastructure.Persistance.DbContexts;
 using Microsoft.Data.SqlClient;
+//localhost:5000
 
 
 
@@ -93,7 +94,7 @@ namespace AuthMicroservice.Controllers
             }
         }
 
-        [AllowAnonymous]
+        [Authorize(Roles ="Admin")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteUser(int id)
         {
@@ -121,7 +122,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                     Domain = "wmind.wonderbiz.org", // for local enviornment hange it to localhost ad of rdeployment chaneg to tmin.wonderbiz.org
+                     Domain = "localhost:5000", // for local enviornment hange it to localhost ad of rdeployment chaneg to tmin.wonderbiz.org
                     MaxAge = TimeSpan.FromHours(1)
                 };
                 Response.Cookies.Append("access_token", accessToken, accessCookieOption);
@@ -132,7 +133,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                    Domain = "wmind.wonderbiz.org",
+                    Domain = "localhost:5000",
                     Expires = DateTime.UtcNow.AddDays(7)
                 };
                 Response.Cookies.Append("refresh_token", refreshToken, refreshCookieOption);
@@ -173,12 +174,12 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                    Domain = "wmind.wonderbiz.org",
+                    Domain = "localhost:5000",
                     MaxAge = TimeSpan.FromHours(1)
                 };
                 Response.Cookies.Append("access_token", accessToken, cookieOption);
 
-                return Redirect("https://wmind.wonderbiz.org/Dashboard?googleLogin=true");
+                return Redirect("https://localhost:5000/Dashboard?googleLogin=true");
             }
             catch (Exception ex)
             {
@@ -187,6 +188,7 @@ namespace AuthMicroservice.Controllers
         }
 
         [HttpGet("me")]
+        [Authorize]
         public async Task<IActionResult> GetCurrentUser()
         {
             try
@@ -215,7 +217,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                    Domain = "wmind.wonderbiz.org",
+                    Domain = "localhost:5000",
                     Expires = DateTime.UtcNow.AddDays(-1)
                 };
 
@@ -245,7 +247,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                    Domain = "wmind.wonderbiz.org",
+                    Domain = "localhost:5000",
                     MaxAge = TimeSpan.FromHours(1)
                 });
 
@@ -255,7 +257,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                    Domain = "wmind.wonderbiz.org",
+                    Domain = "localhost:5000",
                     Expires = DateTime.UtcNow.AddDays(7)
                 });
 
@@ -311,7 +313,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                    Domain = "wmind.wonderbiz.org",
+                    Domain = "localhost:5000",
                     MaxAge = TimeSpan.FromHours(1)
                 };
                 Response.Cookies.Append("access_token", accessToken, accessCookieOption);
@@ -322,7 +324,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                    Domain = "wmind.wonderbiz.org",
+                    Domain = "localhost:5000",
                     Expires = DateTime.UtcNow.AddDays(7)
                 };
                 Response.Cookies.Append("refresh_token", refreshToken, refreshCookieOption);

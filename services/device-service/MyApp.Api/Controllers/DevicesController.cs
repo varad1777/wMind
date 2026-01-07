@@ -27,7 +27,7 @@ namespace MyApp.Api.Controllers
 
         // POST /api/devices
         [HttpPost]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin , Engineer")]
         public async Task<IActionResult> Create([FromBody] CreateDeviceDto dto, CancellationToken ct = default)
         {
             if (!ModelState.IsValid)
@@ -63,6 +63,7 @@ namespace MyApp.Api.Controllers
         // GET /api/devices
         [HttpGet]
         [AllowAnonymous]
+        [Authorize]
         public async Task<IActionResult> GetAll(
             int pageNumber = 1,
             int pageSize = 10,
@@ -95,7 +96,8 @@ namespace MyApp.Api.Controllers
 
         // GET /api/devices/{id}
         [HttpGet("{id:guid}")]
-        [AllowAnonymous]
+        [Authorize]
+
         public async Task<IActionResult> Get(Guid id, CancellationToken ct = default)
         {
             try
@@ -113,7 +115,7 @@ namespace MyApp.Api.Controllers
 
         // PUT /api/devices/{id}
         [HttpPut("{id:guid}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin , Engineer")]
         public async Task<IActionResult> Update(Guid id, [FromBody] UpdateDeviceRequest request, CancellationToken ct = default)
         {
             if (request == null)
@@ -163,7 +165,7 @@ namespace MyApp.Api.Controllers
 
         // POST -> create new port
         [HttpPost("{id:guid}/ports")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin , Engineer")]
         public async Task<IActionResult> AddPort(Guid id, [FromBody] AddPortDto dto, CancellationToken ct)
         {
             if (dto == null) return BadRequest(new { error = "Payload is required" });
@@ -191,7 +193,7 @@ namespace MyApp.Api.Controllers
 
         // PUT -> update existing port
         [HttpPut("{id:guid}/ports/{slaveIndex:int}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin, Engineer")]
         public async Task<IActionResult> UpdatePort(Guid id, int slaveIndex, [FromBody] AddPortDto dto, CancellationToken ct)
         {
             if (dto == null) return BadRequest(new { error = "Payload required" });
@@ -218,6 +220,7 @@ namespace MyApp.Api.Controllers
 
         // GET single port (used by CreatedAtAction)
         [HttpGet("{deviceId:guid}/ports/{slaveIndex:int}")]
+        [Authorize]
         public async Task<IActionResult> GetPort(Guid deviceId, int slaveIndex, CancellationToken ct)
         {
             var port = await _mgr.GetPortAsync(deviceId, slaveIndex, ct);
@@ -230,7 +233,7 @@ namespace MyApp.Api.Controllers
 
         // POST /api/devices/{id}/configuration
         [HttpPost("{id:guid}/configuration")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin , Engineer")]
         public async Task<IActionResult> AddConfiguration(Guid id, [FromBody] MyApp.Application.Dtos.DeviceConfigurationDto dto, CancellationToken ct = default)
         {
             if (!ModelState.IsValid)
