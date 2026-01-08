@@ -9,7 +9,7 @@ using System.Net.WebSockets;
 using Microsoft.EntityFrameworkCore;
 using AuthMicroservice.Infrastructure.Persistance.DbContexts;
 using Microsoft.Data.SqlClient;
-//localhost
+//wmind.wonderbiz.org
 
 
 
@@ -122,7 +122,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                     Domain = "localhost", // for local enviornment hange it to localhost ad of rdeployment chaneg to tmin.wonderbiz.org
+                     Domain = "wmind.wonderbiz.org", // for local enviornment hange it to wmind.wonderbiz.org ad of rdeployment chaneg to tmin.wonderbiz.org
                     MaxAge = TimeSpan.FromHours(1)
                 };
                 Response.Cookies.Append("access_token", accessToken, accessCookieOption);
@@ -133,7 +133,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                    Domain = "localhost",
+                    Domain = "wmind.wonderbiz.org",
                     Expires = DateTime.UtcNow.AddDays(7)
                 };
                 Response.Cookies.Append("refresh_token", refreshToken, refreshCookieOption);
@@ -174,12 +174,12 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                    Domain = "localhost",
+                    Domain = "wmind.wonderbiz.org",
                     MaxAge = TimeSpan.FromHours(1)
                 };
                 Response.Cookies.Append("access_token", accessToken, cookieOption);
 
-                return Redirect("https://localhost:5000/Dashboard?googleLogin=true");
+                return Redirect("https://wmind.wonderbiz.org/Dashboard?googleLogin=true");
             }
             catch (Exception ex)
             {
@@ -217,7 +217,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                    Domain = "localhost",
+                    Domain = "wmind.wonderbiz.org",
                     Expires = DateTime.UtcNow.AddDays(-1)
                 };
 
@@ -247,7 +247,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                    Domain = "localhost",
+                    Domain = "wmind.wonderbiz.org",
                     MaxAge = TimeSpan.FromHours(1)
                 });
 
@@ -257,7 +257,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                    Domain = "localhost",
+                    Domain = "wmind.wonderbiz.org",
                     Expires = DateTime.UtcNow.AddDays(7)
                 });
 
@@ -313,7 +313,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                    Domain = "localhost",
+                    Domain = "wmind.wonderbiz.org",
                     MaxAge = TimeSpan.FromHours(1)
                 };
                 Response.Cookies.Append("access_token", accessToken, accessCookieOption);
@@ -324,7 +324,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
-                    Domain = "localhost",
+                    Domain = "wmind.wonderbiz.org",
                     Expires = DateTime.UtcNow.AddDays(7)
                 };
                 Response.Cookies.Append("refresh_token", refreshToken, refreshCookieOption);
