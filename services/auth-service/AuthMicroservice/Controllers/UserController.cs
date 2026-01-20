@@ -9,7 +9,7 @@ using System.Net.WebSockets;
 using Microsoft.EntityFrameworkCore;
 using AuthMicroservice.Infrastructure.Persistance.DbContexts;
 using Microsoft.Data.SqlClient;
-//wmind.wonderbiz.org
+//localhost
 
 
 
@@ -134,6 +134,7 @@ namespace AuthMicroservice.Controllers
                     SameSite = SameSiteMode.None,
                     Path = "/",
                     Domain = "localhost",
+                    Domain = "localhost",
                     Expires = DateTime.UtcNow.AddDays(7)
                 };
                 Response.Cookies.Append("refresh_token", refreshToken, refreshCookieOption);
@@ -175,10 +176,12 @@ namespace AuthMicroservice.Controllers
                     SameSite = SameSiteMode.None,
                     Path = "/",
                     Domain = "localhost",
+                    Domain = "localhost",
                     MaxAge = TimeSpan.FromHours(1)
                 };
                 Response.Cookies.Append("access_token", accessToken, cookieOption);
 
+                return Redirect("https://localhost:5000/Dashboard?googleLogin=true");
                 return Redirect("https://localhost:5000/Dashboard?googleLogin=true");
             }
             catch (Exception ex)
@@ -218,6 +221,7 @@ namespace AuthMicroservice.Controllers
                     SameSite = SameSiteMode.None,
                     Path = "/",
                     Domain = "localhost",
+                    Domain = "localhost",
                     Expires = DateTime.UtcNow.AddDays(-1)
                 };
 
@@ -248,6 +252,7 @@ namespace AuthMicroservice.Controllers
                     SameSite = SameSiteMode.None,
                     Path = "/",
                     Domain = "localhost",
+                    Domain = "localhost",
                     MaxAge = TimeSpan.FromHours(1)
                 });
 
@@ -257,6 +262,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
+                    Domain = "localhost",
                     Domain = "localhost",
                     Expires = DateTime.UtcNow.AddDays(7)
                 });
@@ -314,6 +320,7 @@ namespace AuthMicroservice.Controllers
                     SameSite = SameSiteMode.None,
                     Path = "/",
                     Domain = "localhost",
+                    Domain = "localhost",
                     MaxAge = TimeSpan.FromHours(1)
                 };
                 Response.Cookies.Append("access_token", accessToken, accessCookieOption);
@@ -324,6 +331,7 @@ namespace AuthMicroservice.Controllers
                     Secure = true,
                     SameSite = SameSiteMode.None,
                     Path = "/",
+                    Domain = "localhost",
                     Domain = "localhost",
                     Expires = DateTime.UtcNow.AddDays(7)
                 };
