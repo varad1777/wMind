@@ -9,7 +9,7 @@ import { Table, TableHeader, TableBody, TableRow, TableCell, TableHead } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import apiAsset from "@/api/axiosAsset";
-import { match_by_regAddress } from "@/api/deviceApi";
+import { matchByRegisterAddress } from "@/api/deviceApi";
 import { toast } from "react-toastify";
 import {
   AlertDialog,
@@ -151,7 +151,7 @@ export default function MapDeviceToAsset() {
         return;
       }
 
-      const matchResp = await match_by_regAddress({ registerAddresses });
+      const matchResp = await matchByRegisterAddress({ registerAddresses });
       setMatchResult(matchResp.data ?? { success: true, data: [] });
     } catch (err: any) {
       console.error(err);
