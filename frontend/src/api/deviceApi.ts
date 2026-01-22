@@ -1,10 +1,9 @@
 import api from "./axios";
 
 /* ============================
-   DTO INTERFACES (BACKEND-ALIGNED)
+   INTERFACES
 ============================ */
 
-// Matches DeviceSlaveDto
 export interface DevicePort {
   slaveIndex: number;
   registerAddress: number;
@@ -15,14 +14,12 @@ export interface DevicePort {
   isHealthy?: boolean;
 }
 
-// Matches DeviceConfigurationDto
 export interface DeviceConfiguration {
   name: string;
   pollIntervalMs: number;
   protocolSettingsJson: string;
 }
 
-// Matches CreateDeviceDto
 export interface CreateDevicePayload {
   name: string;
   description?: string;
@@ -31,7 +28,6 @@ export interface CreateDevicePayload {
   configuration?: DeviceConfiguration;
 }
 
-// Device read model (GET APIs)
 export interface Device {
   id: string;
   name: string;
@@ -42,7 +38,7 @@ export interface Device {
 }
 
 /* ============================
-   API METHODS
+   API FUNCTIONS
 ============================ */
 
 // GET /api/devices
@@ -54,16 +50,12 @@ export const getDevices = async (
   const response = await api.get("/devices", {
     params: { pageNumber, pageSize, searchTerm },
   });
-
-  // returns: items, pageNumber, pageSize, totalCount, totalPages
   return response.data.data;
 };
 
 // POST /api/devices
 export const createDevice = async (payload: CreateDevicePayload) => {
   const response = await api.post("/devices", payload);
-
-  // returns: { deviceId }
   return response.data.data;
 };
 
@@ -88,6 +80,17 @@ export const updateDevice = async (
   return response.data.data;
 };
 
+
+// POST /api/devices/{id}/configuration
+export const addDeviceConfiguration = async (
+  deviceId: string,
+  configuration: DeviceConfiguration
+) => {
+  const response = await api.post(`/devices/${deviceId}/configuration`, configuration);
+  // Returns { deviceId: string, configurationId: string }
+  return response.data.data;
+};
+
 // DELETE /api/devices/{id} (soft delete)
 export const deleteDevice = async (id: string) => {
   const response = await api.delete(`/devices/${id}`);
@@ -108,13 +111,28 @@ export const getDeletedDevices = async () => {
 
 // POST /api/devices/match-by-address
 export const matchByRegisterAddress = async (registerAddresses: number[]) => {
-  const response = await api.post("/devices/match-by-address", {
-    registerAddresses,
-  });
-  return response.data.data;
+  try {
+    const response = await api.post("/devices/match-by-address", {
+      RegisterAddresses: registerAddresses
+    });
+    
+    console.log('API Response:', response.data);
+    
+    return {
+      success: true,
+      data: response.data.data || []
+    };
+  } catch (error: any) {
+    console.error('Match API Error:', error.response?.data || error);
+    return {
+      success: false,
+      data: [],
+      error: error
+    };
+  }
 };
 
-// (unchanged – system stats)
+// GET /stats/avg-response-time
 export const getAvgApiResponseTime = async () => {
   const response = await api.get("/stats/avg-response-time");
   return response.data.avgResponseTime;
