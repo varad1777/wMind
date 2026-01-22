@@ -1,28 +1,23 @@
 import api from "./axios";
 
-/* ============================
-   DTO INTERFACES (BACKEND-ALIGNED)
-============================ */
 
-// Matches DeviceSlaveDto
+
 export interface DevicePort {
   slaveIndex: number;
   registerAddress: number;
   registerLength?: number;
   dataType: string;
-  scale?: number;
+  scale?: number
   unit?: string;
   isHealthy?: boolean;
 }
 
-// Matches DeviceConfigurationDto
 export interface DeviceConfiguration {
   name: string;
   pollIntervalMs: number;
   protocolSettingsJson: string;
 }
 
-// Matches CreateDeviceDto
 export interface CreateDevicePayload {
   name: string;
   description?: string;
@@ -31,7 +26,6 @@ export interface CreateDevicePayload {
   configuration?: DeviceConfiguration;
 }
 
-// Device read model (GET APIs)
 export interface Device {
   id: string;
   name: string;
@@ -41,11 +35,6 @@ export interface Device {
   configuration?: DeviceConfiguration;
 }
 
-/* ============================
-   API METHODS
-============================ */
-
-// GET /api/devices
 export const getDevices = async (
   pageNumber = 1,
   pageSize = 10,
@@ -55,52 +44,44 @@ export const getDevices = async (
     params: { pageNumber, pageSize, searchTerm },
   });
 
-  // returns: items, pageNumber, pageSize, totalCount, totalPages
   return response.data.data;
 };
 
-// POST /api/devices
 export const createDevice = async (payload: CreateDevicePayload) => {
   const response = await api.post("/devices", payload);
 
-  // returns: { deviceId }
   return response.data.data;
 };
 
-// GET /api/devices/{id}
 export const getDeviceById = async (id: string) => {
   const response = await api.get(`/devices/${id}`);
   return response.data.data;
 };
 
-// PUT /api/devices/{id}
 export const updateDevice = async (
   id: string,
   device: Partial<CreateDevicePayload>,
   configuration?: DeviceConfiguration
 ) => {
   const payload = {
-    device,
-    configuration: configuration ?? null,
+    Device: device,              
+    Configuration: configuration ?? null, 
   };
 
   const response = await api.put(`/devices/${id}`, payload);
   return response.data.data;
 };
 
-// DELETE /api/devices/{id} (soft delete)
 export const deleteDevice = async (id: string) => {
   const response = await api.delete(`/devices/${id}`);
   return response.data.data;
 };
 
-// POST /api/devices/{id}/restore
 export const restoreDeviceById = async (id: string) => {
   const response = await api.post(`/devices/${id}/restore`);
   return response.data.data;
 };
 
-// GET /api/devices/deleted
 export const getDeletedDevices = async () => {
   const response = await api.get("/devices/deleted");
   return response.data.data;
@@ -109,7 +90,7 @@ export const getDeletedDevices = async () => {
 export const matchByRegisterAddress = async (registerAddresses: number[]) => {
   try {
     const response = await api.post("/devices/match-by-address", {
-      RegisterAddresses: registerAddresses  // ✅ Capital R
+      RegisterAddresses: registerAddresses 
     });
     
     console.log('API Response:', response.data);
@@ -128,7 +109,6 @@ export const matchByRegisterAddress = async (registerAddresses: number[]) => {
   }
 };
 
-// (unchanged – system stats)
 export const getAvgApiResponseTime = async () => {
   const response = await api.get("/stats/avg-response-time");
   return response.data.avgResponseTime;
