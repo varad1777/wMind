@@ -46,15 +46,14 @@ namespace MyApp.Api.Controllers
                 issuer: _config["Jwt:Issuer"],
                 audience: _config["Jwt:Audience"],
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(30),
+                expires: DateTime.UtcNow.AddYears(1),
                 signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
             );
 
             return Ok(new
             {
                 access_token = new JwtSecurityTokenHandler().WriteToken(token),
-                token_type = "Bearer",
-                expires_in = 1800
+                token_type = "Bearer"
             });
         }
 
