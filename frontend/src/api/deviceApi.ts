@@ -78,7 +78,7 @@ export const updateDevice = async (
 
   console.log("Update Device Payload:", payload);
 
-  const response = await api.put(`/devices/${id}`, payload.device);
+  const response = await api.put(`/devices/${id}`, payload);
   return response.data.data;
 };
 
