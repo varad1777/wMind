@@ -13,12 +13,19 @@ namespace MyApp.Application.Dtos
         [StringLength(255, ErrorMessage = "Description cannot exceed 255 characters.")]
         public string? Description { get; set; }
 
+        // ONLY ADDITION: Protocol (Modbus or OPCUA)
+        [Required(ErrorMessage = "Protocol is required.")]
+        [RegularExpression("^(Modbus|OPCUA)$", ErrorMessage = "Protocol must be either Modbus or OPCUA.")]
+        public string Protocol { get; set; } = "Modbus";
+
         public List<DeviceSlaveDto>? Ports { get; set; }
 
         public DeviceConfigurationDto? Configuration { get; set; }
 
-        public string GatewayClientId { get; set; }   
+        public string GatewayClientId { get; set; }
     }
+
+
 
     public class DeviceSlaveDto
     {

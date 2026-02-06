@@ -20,6 +20,7 @@ export default function AddDeviceForm() {
     name: "",
     description: "",
     gatewayClientId: "",
+    protocol: "Modbus", // ✅ ADDED
   });
 
   const [gateways, setGateways] = useState<Gateway[]>([]);
@@ -58,6 +59,11 @@ export default function AddDeviceForm() {
       return false;
     }
 
+    if (!formData.protocol) {
+      toast.error("Please select a Protocol.");
+      return false;
+    }
+
     if (formData.description.length > 255) {
       toast.error("Description must be less than 255 characters.");
       return false;
@@ -89,6 +95,7 @@ export default function AddDeviceForm() {
         name: formData.name.trim(),
         description: formData.description.trim() || undefined,
         gatewayClientId: formData.gatewayClientId,
+        protocol: formData.protocol, // ✅ ADDED
       };
 
       await createDevice(payload);
@@ -138,6 +145,22 @@ export default function AddDeviceForm() {
                 value={formData.description}
                 onChange={handleChange}
               />
+            </div>
+
+            {/* Protocol Dropdown */}
+            <div className="grid gap-2">
+              <Label htmlFor="protocol">Protocol *</Label>
+              <select
+                id="protocol"
+                name="protocol"
+                value={formData.protocol}
+                onChange={handleChange}
+                className="border rounded-md p-2"
+                required
+              >
+                <option value="Modbus">Modbus</option>
+                <option value="OPCUA">OPCUA</option>
+              </select>
             </div>
 
             {/* Gateway Dropdown */}

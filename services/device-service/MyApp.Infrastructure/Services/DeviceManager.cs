@@ -20,7 +20,6 @@ namespace MyApp.Infrastructure.Services
 
 
 
-
         public async Task<Guid> CreateDeviceAsync(CreateDeviceDto request, CancellationToken ct = default)
         {
             if (request == null)
@@ -32,6 +31,11 @@ namespace MyApp.Infrastructure.Services
 
             if (string.IsNullOrEmpty(request.GatewayClientId))
                 throw new ArgumentException("Gateway Client is required", nameof(request.GatewayClientId));
+
+            // ONLY ADDITION: protocol validation
+            if (string.IsNullOrWhiteSpace(request.Protocol) ||
+                (request.Protocol != "Modbus" && request.Protocol != "OPCUA"))
+                throw new ArgumentException("Protocol must be either Modbus or OPCUA.", nameof(request.Protocol));
 
             const int MaxDevices = 20;
             var currentCount = await _db.Devices.CountAsync(d => !d.IsDeleted, ct);
@@ -54,7 +58,10 @@ namespace MyApp.Infrastructure.Services
                 Description = string.IsNullOrWhiteSpace(request.Description)
                     ? null
                     : request.Description.Trim(),
-                GatewayId = request.GatewayClientId.ToString()
+                GatewayId = request.GatewayClientId.ToString(),
+
+                // ONLY ADDITION: assign protocol
+                Protocol = request.Protocol
             };
 
             await _db.Devices.AddAsync(device, ct);
@@ -800,8 +807,8 @@ namespace MyApp.Infrastructure.Services
 
 
         public async Task<BulkCreateDeviceResultDto> CreateDevicesBulkAsync(
-    BulkCreateDeviceDto request,
-    CancellationToken ct = default)
+            BulkCreateDeviceDto request,
+            CancellationToken ct = default)
         {
             if (request == null || request.Devices.Count == 0)
                 throw new ArgumentException("No devices provided.");
@@ -828,6 +835,11 @@ namespace MyApp.Infrastructure.Services
                     if (string.IsNullOrWhiteSpace(name))
                         throw new ArgumentException("Device name is required.");
 
+                    // ONLY ADDITION: protocol validation
+                    if (string.IsNullOrWhiteSpace(dto.Protocol) ||
+                        (dto.Protocol != "Modbus" && dto.Protocol != "OPCUA"))
+                        throw new ArgumentException("Protocol must be either Modbus or OPCUA.");
+
                     var exists = await _db.Devices
                         .AsNoTracking()
                         .AnyAsync(d => !d.IsDeleted && d.Name.ToLower() == name.ToLower(), ct);
@@ -841,7 +853,10 @@ namespace MyApp.Infrastructure.Services
                         Name = name,
                         Description = string.IsNullOrWhiteSpace(dto.Description)
                             ? null
-                            : dto.Description.Trim()
+                            : dto.Description.Trim(),
+
+                        // ONLY ADDITION: assign protocol
+                        Protocol = dto.Protocol
                     };
 
                     // Configuration (new explicit fields logic)
@@ -893,6 +908,7 @@ namespace MyApp.Infrastructure.Services
             await tx.CommitAsync(ct);
             return result;
         }
+
 
 
 
