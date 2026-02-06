@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(DBContext))]
-    [Migration("20260206103249_AddSignal")]
-    partial class AddSignal
+    [Migration("20260206115036_AddSignal1")]
+    partial class AddSignal1
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -301,8 +301,8 @@ namespace Infrastructure.Migrations
 
                     b.Property<string>("SignalName")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<string>("Unit")
                         .IsRequired()
@@ -311,14 +311,9 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("SignalId");
 
-                    b.HasIndex("AssetId")
-                        .HasDatabaseName("IX_Signal_Asset");
-
-                    b.HasIndex("DeviceId")
-                        .HasDatabaseName("IX_Signal_Device");
-
-                    b.HasIndex("SignalKey")
-                        .IsUnique();
+                    b.HasIndex("AssetId", "DeviceId", "SignalKey")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Signal_AssetDeviceKey");
 
                     b.ToTable("Signals");
                 });

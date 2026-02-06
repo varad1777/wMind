@@ -20,6 +20,8 @@ namespace Infrastructure.DBs
         public DbSet<ReportRequest> ReportRequests { get; set; }
         public DbSet<Alert> Alerts { get; set; } = null!;
         public DbSet<AlertAnalysis> AlertAnalyses { get; set; }
+        public DbSet<Signal> Signals { get; set; } = null!;
+
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -127,6 +129,30 @@ namespace Infrastructure.DBs
                 b.Property(a => a.RecommendedActions).IsRequired();
 
             });
+
+            modelBuilder.Entity<Signal>(b =>
+{
+    b.HasKey(s => s.SignalId); // Primary key
+
+    b.Property(s => s.SignalKey)
+        .HasMaxLength(500)
+        .IsRequired();
+
+    b.Property(s => s.SignalName)
+        .HasMaxLength(200)
+        .IsRequired();
+
+    b.Property(s => s.Unit)
+        .HasMaxLength(50);
+
+    b.Property(s => s.CreatedAt)
+        .IsRequired();
+
+    // Optional: unique index on Asset + Device + SignalKey
+    b.HasIndex(s => new { s.AssetId, s.DeviceId, s.SignalKey })
+     .IsUnique()
+     .HasDatabaseName("UX_Signal_AssetDeviceKey");
+});
 
 
         }
