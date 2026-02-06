@@ -17,9 +17,28 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Settings2, Cpu, Save, ArrowLeft,AlertTriangle} from "lucide-react";
+import { Settings2, Cpu, Save, ArrowLeft } from "lucide-react";
 import { getDeviceById, updateDevice } from "@/api/deviceApi";
 import { toast } from "react-toastify";
+
+/* -------------------- TYPES -------------------- */
+
+type EndianType = "Little" | "Big";
+
+interface ProtocolSettings {
+  IpAddress: string;
+  Port: number;
+  SlaveId: number;
+  Endian: EndianType;
+}
+
+interface FormData {
+  configName: string;
+  pollInterval: number;
+  protocolSettings: ProtocolSettings;
+}
+
+/* -------------------- COMPONENT -------------------- */
 
 export default function EditDeviceForm() {
   const navigate = useNavigate();
@@ -31,7 +50,7 @@ export default function EditDeviceForm() {
     protocol: "ModbusTCP",
   });
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     configName: "",
     pollInterval: 1000,
     protocolSettings: {
@@ -44,149 +63,147 @@ export default function EditDeviceForm() {
 
   const [loading, setLoading] = useState(false);
 
-useEffect(() => {
-    if (!deviceId) return;
+  /* -------------------- FETCH DEVICE -------------------- */
 
-    let toastShown = false;
+  useEffect(() => {
+    if (!deviceId) return;
 
     const fetchDevice = async () => {
       try {
         const res = await getDeviceById(deviceId);
-        console.log("Fetched device:", res);
 
-        
+        setDeviceDetails({
+          name: res.name ?? "",
+          description: res.description ?? "",
+          protocol: res.protocol ?? "ModbusTCP",
+        });
 
-        if (res) {
-          setDeviceDetails({
-            name: res.name || "",
-            description: res.description || "",
-            protocol: res.protocol || "ModbusTCP",
-          });
+        const parsedSettings: ProtocolSettings =
+          res.deviceConfiguration?.protocolSettingsJson
+            ? JSON.parse(res.deviceConfiguration.protocolSettingsJson)
+            : {
+                IpAddress: "127.0.0.1",
+                Port: 5020,
+                SlaveId: 1,
+                Endian: "Little",
+              };
 
-          setFormData({
-            configName: res.deviceConfiguration?.name || `${res.name}_config`,
-            pollInterval: res.deviceConfiguration?.pollIntervalMs || 1000,
-            protocolSettings: res.deviceConfiguration?.protocolSettingsJson
-              ? JSON.parse(res.deviceConfiguration.protocolSettingsJson)
-              : {
-                  IpAddress: "127.0.0.1",
-                  Port: 5020,
-                  SlaveId: 1,
-                  Endian: "Little",
-                },
-          });
-        }
-      } catch (error: any) {
-        console.error("❌ Failed to fetch device:", error);
-
-        // Prevent double toasts
-        if (!toastShown) {
-          toastShown = true;
-          if(error.response?.status === 401){
-            toast.error("unauthorized! Please login again.");
-            navigate("/login");
-          }
-          if (error.response?.status === 404) {
-            toast.error("Device not found!");
-            navigate("/devices");
-          } else {
-            toast.error("Error fetching device details. Please try again.");
-          }
+        setFormData({
+          configName:
+            res.deviceConfiguration?.name ?? `${res.name}_config`,
+          pollInterval:
+            res.deviceConfiguration?.pollIntervalMs ?? 1000,
+          protocolSettings: parsedSettings,
+        });
+      } catch (err: any) {
+        if (err.response?.status === 401) {
+          toast.error("Unauthorized! Please login again.");
+          navigate("/login");
+        } else if (err.response?.status === 404) {
+          toast.error("Device not found!");
+          navigate("/devices");
+        } else {
+          toast.error("Error fetching device details.");
         }
       }
     };
 
     fetchDevice();
-  }, [deviceId]);
+  }, [deviceId, navigate]);
 
+  /* -------------------- VALIDATION -------------------- */
 
-  // 🔹 VALIDATION FUNCTION 
   const validateForm = () => {
-  const { name, description } = deviceDetails;
-  const { configName, pollInterval, protocolSettings } = formData;
-  const { IpAddress, Port, SlaveId } = protocolSettings;
+    const { name, description } = deviceDetails;
+    const { configName, pollInterval, protocolSettings } = formData;
+    const { IpAddress, Port, SlaveId } = protocolSettings;
 
-  const nameRegex = /^[A-Za-z][A-Za-z0-9_\- ]{2,99}$/;
-  if (!nameRegex.test(name.trim())) {
-    toast.error(
-      "Device Name must start with a letter, be 3–100 characters long, and may contain letters, numbers, spaces, underscores, or hyphens (but not start with a hyphen)."
-    );
-    return false;
-  }
+    if (!/^[A-Za-z][A-Za-z0-9_\- ]{2,99}$/.test(name.trim())) {
+      toast.error("Invalid device name.");
+      return false;
+    }
 
-  if (description && description.length > 255) {
-    toast.error("Description must be less than 255 characters.");
-    return false;
-  }
+    if (description && description.length > 255) {
+      toast.error("Description must be under 255 characters.");
+      return false;
+    }
 
-  const configNameRegex = /^[A-Za-z][A-Za-z0-9_\- ]{0,99}$/;
+    if (!configName.trim()) {
+      toast.error("Configuration name is required.");
+      return false;
+    }
 
-  if (!configName.trim()) {
-    toast.error("Configuration name is required.");
-    return false;
-  }
+    if (pollInterval < 100 || pollInterval > 300000) {
+      toast.error("Poll interval must be between 100–300000 ms.");
+      return false;
+    }
 
-  if (!configNameRegex.test(configName.trim())) {
-    toast.error(
-      "Configuration Name must start with a letter, be 1–100 characters long, and may contain letters, numbers, spaces, underscores, or hyphens (but not start with a hyphen)."
-    );
-    return false;
-  }
+    const ipRegex =
+      /^(localhost|((25[0-5]|2[0-4]\d|1?\d{1,2})(\.(25[0-5]|2[0-4]\d|1?\d{1,2})){3}))$/;
 
-  if (isNaN(Number(pollInterval)) || pollInterval < 100 || pollInterval > 300000) {
-    toast.error("Poll interval must be between 100 and 300000 milliseconds.");
-    return false;
-  }
+    if (!ipRegex.test(IpAddress)) {
+      toast.error("Invalid IP address.");
+      return false;
+    }
 
-const ipOrLocalhostRegex =
-  /^(https?:\/\/)?(localhost|((25[0-5]|2[0-4]\d|1?\d{1,2})(\.(25[0-5]|2[0-4]\d|1?\d{1,2})){3}))$/;
+    if (Port < 1 || Port > 65535) {
+      toast.error("Invalid port.");
+      return false;
+    }
 
-  if (!ipOrLocalhostRegex.test(IpAddress)) {
-  toast.error("Invalid IP Address (e.g., 192.168.1.1 or http://localhost)");
-  return false;
-}
+    if (SlaveId < 1 || SlaveId > 247) {
+      toast.error("Invalid Slave ID.");
+      return false;
+    }
 
-
-  if (isNaN(Port) || Port < 1 || Port > 65535) {
-    toast.error("Port must be between 1 and 65535");
-    return false;
-  }
-
-  if (isNaN(SlaveId) || SlaveId < 1 || SlaveId > 247) {
-    toast.error("Slave ID must be between 1 and 247");
-    return false;
-  }
-
-  return true;
+    return true;
   };
+
+  /* -------------------- HANDLERS -------------------- */
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleProtocolChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      protocolSettings: {
-        ...formData.protocolSettings,
-        [name]: name === "Port" || name === "SlaveId" ? Number(value) : value,
-      },
-    });
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]:
+        name === "pollInterval" ? Number(value) : value,
+    }));
   };
 
-  const handleEndianChange = (value: string) => {
-    setFormData({
-      ...formData,
-      protocolSettings: { ...formData.protocolSettings, Endian: value },
-    });
+  const handleProtocolChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const { name, value } = e.target;
+
+    setFormData((prev) => ({
+      ...prev,
+      protocolSettings: {
+        ...prev.protocolSettings,
+        [name]:
+          name === "Port" || name === "SlaveId"
+            ? Number(value)
+            : value,
+      },
+    }));
   };
+
+  const handleEndianChange = (value: EndianType) => {
+    setFormData((prev) => ({
+      ...prev,
+      protocolSettings: {
+        ...prev.protocolSettings,
+        Endian: value,
+      },
+    }));
+  };
+
+  /* -------------------- SUBMIT -------------------- */
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!deviceId) return toast.error("Missing Device ID!");
+    if (!deviceId) return;
 
-    // Run validation before submitting
     if (!validateForm()) return;
 
     setLoading(true);
@@ -195,8 +212,11 @@ const ipOrLocalhostRegex =
       device: { ...deviceDetails },
       configuration: {
         name: formData.configName.trim(),
-        pollIntervalMs: Number(formData.pollInterval),
-        protocolSettingsJson: JSON.stringify(formData.protocolSettings),
+        pollIntervalMs: formData.pollInterval,
+        ipAddress: formData.protocolSettings.IpAddress,
+        port: formData.protocolSettings.Port,
+        slaveId: formData.protocolSettings.SlaveId,
+        endian: formData.protocolSettings.Endian,
       },
     };
 
@@ -205,210 +225,95 @@ const ipOrLocalhostRegex =
       toast.success("Device updated successfully!");
       setTimeout(() => navigate("/devices"), 1000);
     } catch (err: any) {
-      if(err.response?.status === 401){
-        toast.error("unauthorized! Please login again.");
-        navigate("/login");
-      }
-      console.error("Error editing device:", err);
-
-      // Extract backend message
-      const backendMessage =
-        err?.response?.data?.error || 
-        err?.response?.data?.message || 
-        err?.response?.data?.data?.message ||
-        "Failed to Edit device. Please try again.";
-
-      toast.error(backendMessage, {
-        position: "top-right",
-        autoClose: 4000,
-        theme: "colored",
-      });
-    } 
-    finally {
+      toast.error(
+        err?.response?.data?.message ??
+          "Failed to update device."
+      );
+    } finally {
       setLoading(false);
     }
   };
 
-  
+  /* -------------------- JSX -------------------- */
+
   return (
-    <div className="flex justify-center items-center min-h-[85vh] bg-gradient-to-b from-background to-muted/30 text-foreground p-4 ">
-      <Card className="w-full max-w-2xl shadow-lg border border-border/60 bg-card/90 backdrop-blur-sm ">
-        <CardHeader className="flex flex-col items-center space-y-2 pb-2">
-          <Settings2 className="h-7 w-7 text-primary" />
-          <CardTitle className="text-2xl font-semibold tracking-tight">
-            Edit Device & Configuration
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Update device details and configuration parameters
-          </p>
+    <div className="flex justify-center items-center min-h-[85vh] p-4">
+      <Card className="w-full max-w-2xl">
+        <CardHeader>
+          <CardTitle>Edit Device & Configuration</CardTitle>
         </CardHeader>
 
-        <CardContent className="pt-4">
-          <form onSubmit={handleSubmit} className="space-y-8">
-            {/* DEVICE DETAILS */}
-            <div className="rounded-xl border border-border/70 bg-muted/30 p-5 shadow-inner">
-              <div className="flex items-center gap-2 mb-4">
-                <Cpu className="h-5 w-5 text-primary" />
-                <h2 className="text-lg font-semibold">Device Details</h2>
-              </div>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <Input
+              name="name"
+              value={deviceDetails.name}
+              onChange={(e) =>
+                setDeviceDetails({
+                  ...deviceDetails,
+                  name: e.target.value,
+                })
+              }
+              placeholder="Device Name"
+            />
 
-              <div className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Device Name *</Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    type="text"
-                    value={deviceDetails.name}
-                    onChange={(e) =>
-                      setDeviceDetails({ ...deviceDetails, name: e.target.value })
-                    }
-                    required
-                  />
-                </div>
+            <Input
+              name="configName"
+              value={formData.configName}
+              onChange={handleChange}
+              placeholder="Configuration Name"
+            />
 
-                <div className="grid gap-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    name="description"
-                    value={deviceDetails.description}
-                    onChange={(e) =>
-                      setDeviceDetails({ ...deviceDetails, description: e.target.value })
-                    }
-                  />
-                </div>
+            <Input
+              name="pollInterval"
+              type="number"
+              value={formData.pollInterval}
+              onChange={handleChange}
+            />
 
-                <div className="grid gap-2">
-                  <Label>Protocol</Label>
-                  <Select
-                    value={deviceDetails.protocol}
-                    onValueChange={(value) =>
-                      setDeviceDetails({ ...deviceDetails, protocol: value })
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select protocol" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-background text-foreground">
-                      <SelectItem value="ModbusTCP">ModbusTCP</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
+            <Input
+              name="IpAddress"
+              value={formData.protocolSettings.IpAddress}
+              onChange={handleProtocolChange}
+            />
 
-            <div className="rounded-xl border border-border/70 bg-muted/30 p-5 shadow-inner">
-              <div className="flex items-center gap-2 mb-4">
-                <Settings2 className="h-5 w-5 text-primary" />
-                <h2 className="text-lg font-semibold">Configuration Details</h2>
-              </div>
+            <Input
+              name="Port"
+              type="number"
+              value={formData.protocolSettings.Port}
+              onChange={handleProtocolChange}
+            />
 
-              <div className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="configName">Configuration Name *</Label>
-                  <Input
-                    id="configName"
-                    name="configName"
-                    type="text"
-                    value={formData.configName}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
+            <Select
+              value={formData.protocolSettings.Endian}
+              onValueChange={handleEndianChange}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select Endian" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Little">Little</SelectItem>
+                <SelectItem value="Big">Big</SelectItem>
+              </SelectContent>
+            </Select>
 
-                <div className="grid gap-2">
-                  <Label htmlFor="pollInterval">Poll Interval (ms)</Label>
-                  <Input
-                    id="pollInterval"
-                    name="pollInterval"
-                    type="number"
-                    value={formData.pollInterval}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>IP Address</Label>
-                    <Input
-                      name="IpAddress"
-                      value={formData.protocolSettings.IpAddress}
-                      onChange={handleProtocolChange}
-                      required
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label>Port</Label>
-                    <Input
-                      name="Port"
-                      type="number"
-                      value={formData.protocolSettings.Port}
-                      onChange={handleProtocolChange}
-                      required
-                    />
-                  </div>
-                  {/* <div className="grid gap-2">
-                    <Label htmlFor="SlaveId">Slave ID</Label>
-                    <Select
-                      value={formData.protocolSettings.SlaveId?.toString() || ""}
-                      onValueChange={(value) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          protocolSettings: {
-                            ...prev.protocolSettings,
-                            SlaveId: value,
-                          },
-                        }))
-                      }
-                    >
-                      <SelectTrigger id="SlaveId">
-                        <SelectValue placeholder="Select Slave ID" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-background text-foreground">
-                        <SelectItem value="1">1</SelectItem>
-                        <SelectItem value="2">2</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Endian</Label>
-                    <Select
-                      value={formData.protocolSettings.Endian}
-                      onValueChange={handleEndianChange}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Endian" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-background text-foreground">
-                        <SelectItem value="Little">Little</SelectItem>
-                        <SelectItem value="Big">Big</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div> */}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center pt-4 border-t border-border/40">
+            <div className="flex justify-between">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => navigate("/devices")}
               >
-                <ArrowLeft className="h-4 w-4" /> Back to Devices
+                <ArrowLeft size={16} /> Back
               </Button>
 
               <Button type="submit" disabled={loading}>
-                <Save className="h-4 w-4" /> {loading ? "Updating..." : "Save Changes"}
+                <Save size={16} />
+                {loading ? "Saving..." : "Save"}
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
-
     </div>
   );
 }

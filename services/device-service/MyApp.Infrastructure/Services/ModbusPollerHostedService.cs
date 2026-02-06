@@ -206,21 +206,14 @@ namespace MyApp.Infrastructure.Services
             var cfg = device.DeviceConfiguration!;
             // _log.LogInformation("Polling device {DeviceId} using config {CfgId}", device.DeviceId, cfg.ConfigurationId);
 
-            JsonDocument settings;
-            try { settings = JsonDocument.Parse(cfg.ProtocolSettingsJson ?? "{}"); }
-            catch (Exception ex)
-            {
-                // _log.LogError(ex, "Invalid ProtocolSettingsJson for device {Device}", device.DeviceId);
-                return cfg.PollIntervalMs > 0 ? cfg.PollIntervalMs : 1000;
-            }
+            var ip = cfg.IpAddress;
+            var port = cfg.Port > 0 ? cfg.Port : 502;
+            var slaveIdFromConfig = cfg.SlaveId > 0 ? cfg.SlaveId : 1;
+            var endian = cfg.Endian ?? "Big";
+            var pollIntervalMs = cfg.PollIntervalMs > 0 ? cfg.PollIntervalMs : 1000;
 
-            // read settings strictly from ProtocolSettingsJson (no device.Host/device.Port fallback)
-            var ip = TryGetString(settings, "IpAddress");
-            var port = TryGetInt(settings, "Port", 502); // default Modbus TCP port is 502
-            var slaveIdFromConfig = TryGetInt(settings, "SlaveId", 1); // kept as fallback if no DeviceSlave entry
-            var endian = TryGetString(settings, "Endian") ?? "Big";
-            var pollIntervalMs = TryGetInt(settings, "PollIntervalMs", cfg.PollIntervalMs > 0 ? cfg.PollIntervalMs : 1000);
-            var addressStyleCfg = TryGetString(settings, "AddressStyle");
+            var addressStyleCfg = "ZeroBased";
+
 
             if (string.IsNullOrEmpty(ip))
             {
@@ -240,11 +233,15 @@ namespace MyApp.Infrastructure.Services
                 .SelectMany(ds => ds.Registers.Where(r => r.IsHealthy).Select(r => new { DeviceSlave = ds, Register = r }))
                 .ToList();
 
-            if (!activeRegisters.Any())
-            {
-                _log.LogWarning("No healthy registers for device {Device}. Ip={Ip} Port={Port} Settings={Settings}", device.DeviceId, ip, port, cfg.ProtocolSettingsJson);
-                return pollIntervalMs;
-            }
+            _log.LogWarning(
+     "No healthy registers for device {Device}. Ip={Ip} Port={Port} SlaveId={SlaveId} Endian={Endian}",
+     device.DeviceId,
+     ip,
+     port,
+     cfg.SlaveId,
+     cfg.Endian
+ );
+
 
             const int ModbusMaxRegistersPerRead = 125;
 
@@ -282,7 +279,7 @@ namespace MyApp.Infrastructure.Services
 
             // Acquire semaphore to limit concurrent network connections/polls.
             // This ensures we don't overload network/DB/CPU when many device loops run.
-           
+
             await _semaphore.WaitAsync(ct);  // this basically used to controll the concurrent access.
             //----
             try
@@ -529,7 +526,7 @@ namespace MyApp.Infrastructure.Services
 
                         //-----
                     }
-                } 
+                }
 
                 // Prepare telemetry DTOs and push them to SignalR (no DB save)
                 if (allReads.Count > 0)
@@ -607,15 +604,15 @@ namespace MyApp.Infrastructure.Services
                 _semaphore.Release();
             }
 
-           
-            
-            
-            
+
+
+
+
             //----
-            
-            
-            
-            
+
+
+
+
             // Return the poll interval (ms) for next loop delay
             return pollIntervalMs;
         }

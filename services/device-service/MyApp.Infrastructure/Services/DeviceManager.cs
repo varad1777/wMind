@@ -23,23 +23,27 @@ namespace MyApp.Infrastructure.Services
 
         public async Task<Guid> CreateDeviceAsync(CreateDeviceDto request, CancellationToken ct = default)
         {
-            if (request == null) throw new ArgumentNullException(nameof(request));
+            if (request == null)
+                throw new ArgumentNullException(nameof(request));
+
             var name = (request.Name ?? string.Empty).Trim();
-            if (string.IsNullOrEmpty(name)) throw new ArgumentException("Device name is required.", nameof(request.Name));
+            if (string.IsNullOrEmpty(name))
+                throw new ArgumentException("Device name is required.", nameof(request.Name));
 
             if (string.IsNullOrEmpty(request.GatewayClientId))
-                throw new ArgumentException("Gateway Client is REquired", nameof(request.GatewayClientId));
+                throw new ArgumentException("Gateway Client is required", nameof(request.GatewayClientId));
 
             const int MaxDevices = 20;
             var currentCount = await _db.Devices.CountAsync(d => !d.IsDeleted, ct);
             if (currentCount >= MaxDevices)
                 throw new InvalidOperationException($"Cannot create more than {MaxDevices} devices.");
 
-
             var exists = await _db.Devices
-                                 .AsNoTracking()
-                                 .AnyAsync(d => !d.IsDeleted && d.Name.ToLower() == name.ToLower(), ct);
-            if (exists) throw new InvalidOperationException($"Device name '{name}' already exists.");
+                .AsNoTracking()
+                .AnyAsync(d => !d.IsDeleted && d.Name.ToLower() == name.ToLower(), ct);
+
+            if (exists)
+                throw new InvalidOperationException($"Device name '{name}' already exists.");
 
             await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
@@ -47,30 +51,41 @@ namespace MyApp.Infrastructure.Services
             {
                 DeviceId = Guid.NewGuid(),
                 Name = name,
-                Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
-                GatewayId=request.GatewayClientId.ToString()
+                Description = string.IsNullOrWhiteSpace(request.Description)
+                    ? null
+                    : request.Description.Trim(),
+                GatewayId = request.GatewayClientId.ToString()
             };
 
             await _db.Devices.AddAsync(device, ct);
 
-
-
-
-
+            // Configuration (new explicit fields logic)
             if (request.Configuration != null)
             {
-                string protoJson = request.Configuration.ProtocolSettingsJson;
-                if (string.IsNullOrWhiteSpace(protoJson) || protoJson.Trim() == "{}")
-                {
-                    protoJson = JsonSerializer.Serialize(request.Configuration);
-                }
+                if (string.IsNullOrWhiteSpace(request.Configuration.IpAddress))
+                    throw new ArgumentException("IpAddress is required.");
+
+                if (request.Configuration.Port <= 0 || request.Configuration.Port > 65535)
+                    throw new ArgumentOutOfRangeException(nameof(request.Configuration.Port));
+
+                if (request.Configuration.SlaveId < 0 || request.Configuration.SlaveId > 247)
+                    throw new ArgumentOutOfRangeException(nameof(request.Configuration.SlaveId));
 
                 var cfg = new DeviceConfiguration
                 {
                     ConfigurationId = Guid.NewGuid(),
-                    Name = string.IsNullOrWhiteSpace(request.Configuration.Name) ? $"{device.Name}-cfg" : request.Configuration.Name.Trim(),
-                    PollIntervalMs = request.Configuration.PollIntervalMs > 0 ? request.Configuration.PollIntervalMs : 1000,
-                    ProtocolSettingsJson = protoJson
+                    Name = string.IsNullOrWhiteSpace(request.Configuration.Name)
+                        ? $"{device.Name}-cfg"
+                        : request.Configuration.Name.Trim(),
+
+                    PollIntervalMs = request.Configuration.PollIntervalMs > 0
+                        ? request.Configuration.PollIntervalMs
+                        : 1000,
+
+                    IpAddress = request.Configuration.IpAddress,
+                    Port = request.Configuration.Port,
+                    SlaveId = request.Configuration.SlaveId,
+                    Endian = request.Configuration.Endian
                 };
 
                 await _db.DeviceConfigurations.AddAsync(cfg, ct);
@@ -83,10 +98,10 @@ namespace MyApp.Infrastructure.Services
             _log.LogInformation("Created device {DeviceId}", device.DeviceId);
             return device.DeviceId;
         }
-        
-       
-        
-        
+
+
+
+
         public async Task UpdateDeviceAsync(Guid deviceId, UpdateDeviceDto dto, DeviceConfigurationDto? configDto = null, CancellationToken ct = default)
         {
             var device = await _db.Devices.FindAsync(new object[] { deviceId }, ct);
@@ -98,33 +113,28 @@ namespace MyApp.Infrastructure.Services
             if (isMapped)
                 throw new InvalidOperationException("Cannot update device because it is mapped to asset");
 
-
-
-
             // Prevent updates to soft-deleted devices
             if (device.IsDeleted)
                 throw new InvalidOperationException("Cannot update a deleted device.");
 
-            // Update device fields (only when provided)
+            // ---------------- Device fields ----------------
             if (dto.Name != null)
             {
                 var trimmed = dto.Name.Trim();
                 if (trimmed.Length < 3 || trimmed.Length > 100)
                     throw new ArgumentException("Device name must be between 3 and 100 characters.", nameof(dto.Name));
 
-                // Check uniqueness only when the new name is different from current (case-insensitive)
                 var newNameNorm = trimmed.ToLowerInvariant();
                 var currentNameNorm = (device.Name ?? string.Empty).ToLowerInvariant();
 
                 if (newNameNorm != currentNameNorm)
                 {
-                    // Exclude this device and any soft-deleted devices from the uniqueness check
                     var exists = await _db.Devices
                                           .AsNoTracking()
                                           .AnyAsync(d =>
-                                              d.DeviceId != deviceId
-                                              && !d.IsDeleted
-                                              && d.Name.ToLower() == newNameNorm,
+                                              d.DeviceId != deviceId &&
+                                              !d.IsDeleted &&
+                                              d.Name.ToLower() == newNameNorm,
                                               ct);
 
                     if (exists)
@@ -150,84 +160,116 @@ namespace MyApp.Infrastructure.Services
                 device.Protocol = trimmedProto;
             }
 
-            // Handle configuration update/create when configDto is provided
+            // ---------------- Configuration ----------------
             if (configDto != null)
             {
                 if (string.IsNullOrWhiteSpace(configDto.Name) || configDto.Name.Length > 100)
                     throw new ArgumentException("Configuration name must be between 1 and 100 characters.", nameof(configDto.Name));
+
                 if (configDto.PollIntervalMs < 100 || configDto.PollIntervalMs > 300000)
-                    throw new ArgumentOutOfRangeException(nameof(configDto.PollIntervalMs), "Poll interval must be between 100 and 300000 milliseconds.");
-                if (configDto.ProtocolSettingsJson == null)
-                    throw new ArgumentException("ProtocolSettingsJson is required.", nameof(configDto.ProtocolSettingsJson));
+                    throw new ArgumentOutOfRangeException(nameof(configDto.PollIntervalMs));
+
+                if (string.IsNullOrWhiteSpace(configDto.IpAddress))
+                    throw new ArgumentException("IpAddress is required");
+
+                if (configDto.Port <= 0 || configDto.Port > 65535)
+                    throw new ArgumentOutOfRangeException(nameof(configDto.Port));
+
+                if (configDto.SlaveId < 0 || configDto.SlaveId > 247)
+                    throw new ArgumentOutOfRangeException(nameof(configDto.SlaveId));
 
                 if (device.DeviceConfigurationId is Guid cfgId)
                 {
-                    // check if other devices reference same config
                     var otherUses = await _db.Devices
                                              .AsNoTracking()
                                              .AnyAsync(d => d.DeviceId != deviceId && d.DeviceConfigurationId == cfgId, ct);
 
                     if (!otherUses)
                     {
-                        // update in-place if config exists, otherwise create replacement
                         var existingCfg = await _db.DeviceConfigurations.FindAsync(new object[] { cfgId }, ct);
                         if (existingCfg == null)
                         {
                             var replacement = new DeviceConfiguration
                             {
-                                ConfigurationId = Guid.NewGuid(), // ensure id immediately
+                                ConfigurationId = Guid.NewGuid(),
                                 Name = configDto.Name.Trim(),
                                 PollIntervalMs = configDto.PollIntervalMs,
-                                ProtocolSettingsJson = configDto.ProtocolSettingsJson
+                                IpAddress = configDto.IpAddress,
+                                Port = configDto.Port,
+                                SlaveId = configDto.SlaveId,
+                                Endian = configDto.Endian
                             };
+
                             await _db.DeviceConfigurations.AddAsync(replacement, ct);
                             device.DeviceConfigurationId = replacement.ConfigurationId;
-                            _log.LogWarning("Device {DeviceId} referenced missing configuration {CfgId}; created replacement {ReplacementId}", deviceId, cfgId, replacement.ConfigurationId);
+
+                            _log.LogWarning(
+                                "Device {DeviceId} referenced missing configuration {CfgId}; created replacement {ReplacementId}",
+                                deviceId, cfgId, replacement.ConfigurationId);
                         }
                         else
                         {
                             existingCfg.Name = configDto.Name.Trim();
                             existingCfg.PollIntervalMs = configDto.PollIntervalMs;
-                            existingCfg.ProtocolSettingsJson = configDto.ProtocolSettingsJson;
+                            existingCfg.IpAddress = configDto.IpAddress;
+                            existingCfg.Port = configDto.Port;
+                            existingCfg.SlaveId = configDto.SlaveId;
+                            existingCfg.Endian = configDto.Endian;
+
                             _db.DeviceConfigurations.Update(existingCfg);
-                            _log.LogInformation("Updated DeviceConfiguration {CfgId} for device {DeviceId}", cfgId, deviceId);
+
+                            _log.LogInformation(
+                                "Updated DeviceConfiguration {CfgId} for device {DeviceId}",
+                                cfgId, deviceId);
                         }
                     }
                     else
                     {
-                        // shared config — create and attach new
                         var newCfg = new DeviceConfiguration
                         {
                             ConfigurationId = Guid.NewGuid(),
                             Name = configDto.Name.Trim(),
                             PollIntervalMs = configDto.PollIntervalMs,
-                            ProtocolSettingsJson = configDto.ProtocolSettingsJson
+                            IpAddress = configDto.IpAddress,
+                            Port = configDto.Port,
+                            SlaveId = configDto.SlaveId,
+                            Endian = configDto.Endian
                         };
+
                         await _db.DeviceConfigurations.AddAsync(newCfg, ct);
                         device.DeviceConfigurationId = newCfg.ConfigurationId;
-                        _log.LogInformation("Configuration {CfgId} is shared; created new DeviceConfiguration {NewCfg} and attached to device {DeviceId}", cfgId, newCfg.ConfigurationId, deviceId);
+
+                        _log.LogInformation(
+                            "Configuration {CfgId} is shared; created new DeviceConfiguration {NewCfg} and attached to device {DeviceId}",
+                            cfgId, newCfg.ConfigurationId, deviceId);
                     }
                 }
                 else
                 {
-                    // no config attached -> create and attach
                     var newCfg = new DeviceConfiguration
                     {
                         ConfigurationId = Guid.NewGuid(),
                         Name = configDto.Name.Trim(),
                         PollIntervalMs = configDto.PollIntervalMs,
-                        ProtocolSettingsJson = configDto.ProtocolSettingsJson
+                        IpAddress = configDto.IpAddress,
+                        Port = configDto.Port,
+                        SlaveId = configDto.SlaveId,
+                        Endian = configDto.Endian
                     };
+
                     await _db.DeviceConfigurations.AddAsync(newCfg, ct);
                     device.DeviceConfigurationId = newCfg.ConfigurationId;
-                    _log.LogInformation("Created and attached new DeviceConfiguration {CfgId} to device {DeviceId}", newCfg.ConfigurationId, deviceId);
+
+                    _log.LogInformation(
+                        "Created and attached new DeviceConfiguration {CfgId} to device {DeviceId}",
+                        newCfg.ConfigurationId, deviceId);
                 }
             }
 
-            // device is tracked; no need to call _db.Devices.Update(device)
             await _db.SaveChangesAsync(ct);
             _log.LogInformation("Updated device {DeviceId}", deviceId);
         }
+
 
 
 
@@ -419,7 +461,11 @@ namespace MyApp.Infrastructure.Services
                 ConfigurationId = Guid.NewGuid(),
                 Name = string.IsNullOrWhiteSpace(dto.Name) ? $"{device.Name}-cfg" : dto.Name.Trim(),
                 PollIntervalMs = dto.PollIntervalMs > 0 ? dto.PollIntervalMs : 1000,
-                ProtocolSettingsJson = string.IsNullOrWhiteSpace(dto.ProtocolSettingsJson) ? "{}" : dto.ProtocolSettingsJson
+                IpAddress = dto.IpAddress,
+                Port = dto.Port,
+                SlaveId = dto.SlaveId,
+                Endian = dto.Endian
+
             };
 
             await _db.DeviceConfigurations.AddAsync(cfg, ct);
@@ -429,24 +475,6 @@ namespace MyApp.Infrastructure.Services
             _log.LogInformation("Added configuration {CfgId} to device {DeviceId}", cfg.ConfigurationId, deviceId);
             return cfg.ConfigurationId;
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
         public async Task<Guid> AddPortAsync(Guid deviceId, AddPortDto dto, CancellationToken ct = default)
@@ -488,7 +516,7 @@ namespace MyApp.Infrastructure.Services
             return port.deviceSlaveId;
         }
 
-        
+
 
 
 
@@ -771,7 +799,9 @@ namespace MyApp.Infrastructure.Services
 
 
 
-        public async Task<BulkCreateDeviceResultDto> CreateDevicesBulkAsync(BulkCreateDeviceDto request, CancellationToken ct = default)
+        public async Task<BulkCreateDeviceResultDto> CreateDevicesBulkAsync(
+    BulkCreateDeviceDto request,
+    CancellationToken ct = default)
         {
             if (request == null || request.Devices.Count == 0)
                 throw new ArgumentException("No devices provided.");
@@ -785,9 +815,8 @@ namespace MyApp.Infrastructure.Services
                 result.Errors.Add(
                     $"Cannot create {request.Devices.Count} devices. Total devices after creation would be {existingCount + request.Devices.Count}, but maximum allowed is 20."
                 );
-                return result; // early return, no devices are created
+                return result;
             }
-
 
             await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
@@ -795,11 +824,12 @@ namespace MyApp.Infrastructure.Services
             {
                 try
                 {
-                    var name = dto.Name.Trim();
+                    var name = dto.Name?.Trim();
                     if (string.IsNullOrWhiteSpace(name))
                         throw new ArgumentException("Device name is required.");
 
-                    var exists = await _db.Devices.AsNoTracking()
+                    var exists = await _db.Devices
+                        .AsNoTracking()
                         .AnyAsync(d => !d.IsDeleted && d.Name.ToLower() == name.ToLower(), ct);
 
                     if (exists)
@@ -809,21 +839,38 @@ namespace MyApp.Infrastructure.Services
                     {
                         DeviceId = Guid.NewGuid(),
                         Name = name,
-                        Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim()
+                        Description = string.IsNullOrWhiteSpace(dto.Description)
+                            ? null
+                            : dto.Description.Trim()
                     };
 
+                    // Configuration (new explicit fields logic)
                     if (dto.Configuration != null)
                     {
-                        string protoJson = string.IsNullOrWhiteSpace(dto.Configuration.ProtocolSettingsJson) || dto.Configuration.ProtocolSettingsJson.Trim() == "{}"
-                            ? JsonSerializer.Serialize(dto.Configuration)
-                            : dto.Configuration.ProtocolSettingsJson;
+                        if (string.IsNullOrWhiteSpace(dto.Configuration.IpAddress))
+                            throw new ArgumentException("IpAddress is required.");
+
+                        if (dto.Configuration.Port <= 0 || dto.Configuration.Port > 65535)
+                            throw new ArgumentOutOfRangeException(nameof(dto.Configuration.Port));
+
+                        if (dto.Configuration.SlaveId < 0 || dto.Configuration.SlaveId > 247)
+                            throw new ArgumentOutOfRangeException(nameof(dto.Configuration.SlaveId));
 
                         var cfg = new DeviceConfiguration
                         {
                             ConfigurationId = Guid.NewGuid(),
-                            Name = string.IsNullOrWhiteSpace(dto.Configuration.Name) ? $"{device.Name}-cfg" : dto.Configuration.Name.Trim(),
-                            PollIntervalMs = dto.Configuration.PollIntervalMs > 0 ? dto.Configuration.PollIntervalMs : 1000,
-                            ProtocolSettingsJson = protoJson
+                            Name = string.IsNullOrWhiteSpace(dto.Configuration.Name)
+                                ? $"{device.Name}-cfg"
+                                : dto.Configuration.Name.Trim(),
+
+                            PollIntervalMs = dto.Configuration.PollIntervalMs > 0
+                                ? dto.Configuration.PollIntervalMs
+                                : 1000,
+
+                            IpAddress = dto.Configuration.IpAddress,
+                            Port = dto.Configuration.Port,
+                            SlaveId = dto.Configuration.SlaveId,
+                            Endian = dto.Configuration.Endian
                         };
 
                         await _db.DeviceConfigurations.AddAsync(cfg, ct);
@@ -848,105 +895,110 @@ namespace MyApp.Infrastructure.Services
         }
 
 
-  public async Task<List<DeviceConfigurationResponseDto>> GetDeviceConfigurationsByGatewayAsync(string gatewayId, CancellationToken ct = default)
-  {
-    if (string.IsNullOrWhiteSpace(gatewayId))
-        throw new ArgumentException("GatewayId cannot be empty.", nameof(gatewayId));
 
-    // STEP 1: Get devices that belong to this gateway
-    var gatewayDeviceIds = await _db.Devices
-        .AsNoTracking()
-        .Where(d => d.GatewayId == gatewayId && !d.IsDeleted)
-        .Select(d => d.DeviceId)
-        .ToListAsync(ct);
-
-    if (!gatewayDeviceIds.Any())
-        throw new KeyNotFoundException($"No gateway found with GatewayId '{gatewayId}'.");
-
-
-    // STEP 2: Get mappings ONLY for those devices
-    var mappings = await _assetDb.MappingTable
-        .AsNoTracking()
-        .Where(m => gatewayDeviceIds.Contains(m.DeviceId))
-        .Select(m => new
+        public async Task<List<DeviceConfigurationResponseDto>> GetDeviceConfigurationsByGatewayAsync(string gatewayId, CancellationToken ct = default)
         {
-            m.DeviceId,
-            RegisterId = m.registerId   
-        })
-        .ToListAsync(ct);
+            if (string.IsNullOrWhiteSpace(gatewayId))
+                throw new ArgumentException("GatewayId cannot be empty.", nameof(gatewayId));
 
-    if (!mappings.Any())
-        return new List<DeviceConfigurationResponseDto>();
+            // STEP 1: Get devices that belong to this gateway
+            var gatewayDeviceIds = await _db.Devices
+                .AsNoTracking()
+                .Where(d => d.GatewayId == gatewayId && !d.IsDeleted)
+                .Select(d => d.DeviceId)
+                .ToListAsync(ct);
 
-    // STEP 3: Extract mapped device IDs
-    var mappedDeviceIds = mappings
-        .Select(m => m.DeviceId)
-        .Distinct()
-        .ToList();
+            if (!gatewayDeviceIds.Any())
+                throw new KeyNotFoundException($"No gateway found with GatewayId '{gatewayId}'.");
 
-    // STEP 4: Load devices + configuration + slaves + registers
-    var devices = await _db.Devices
-        .AsNoTracking()
-        .Where(d => mappedDeviceIds.Contains(d.DeviceId) && !d.IsDeleted)
-        .Include(d => d.DeviceConfiguration)
-        .Include(d => d.DeviceSlave)
-            .ThenInclude(s => s.Registers)
-        .ToListAsync(ct);
 
-    if (!devices.Any())
-        return new List<DeviceConfigurationResponseDto>();
+            // STEP 2: Get mappings ONLY for those devices
+            var mappings = await _assetDb.MappingTable
+                .AsNoTracking()
+                .Where(m => gatewayDeviceIds.Contains(m.DeviceId))
+                .Select(m => new
+                {
+                    m.DeviceId,
+                    RegisterId = m.registerId
+                })
+                .ToListAsync(ct);
 
-    // STEP 5: Build lookup for mapped registers per device
-    var mappedRegistersByDevice = mappings
-        .GroupBy(m => m.DeviceId)
-        .ToDictionary(
-            g => g.Key,
-            g => g.Select(x => x.RegisterId).ToHashSet()
-        );
+            if (!mappings.Any())
+                return new List<DeviceConfigurationResponseDto>();
 
-    // STEP 6: Build response
-    var result = devices.Select(device => new DeviceConfigurationResponseDto
-    {
-          DeviceId = device.DeviceId,
-          Name = device.Name,
-          Protocol = device.Protocol ?? string.Empty,
-          PollIntervalMs = device.DeviceConfiguration?.PollIntervalMs ?? 1000,
-          ProtocolSettingsJson = device.DeviceConfiguration?.ProtocolSettingsJson ?? "{}",
-  
-          Slaves = device.DeviceSlave
-              .Where(s => s.IsHealthy)
-              .Select(s => new SlaveDto
-              {
-                  DeviceSlaveId = s.deviceSlaveId,
-                  SlaveIndex = s.slaveIndex,
-                  IsHealthy = s.IsHealthy,
-  
-                  Registers = s.Registers
-                      .Where(r =>
-                          r.IsHealthy &&
-                          mappedRegistersByDevice.TryGetValue(device.DeviceId, out var registerIds) &&
-                          registerIds.Contains(r.RegisterId)   
-                      )
-                      .OrderBy(r => r.RegisterAddress)
-                      .Select(r => new DeviceRegisterDto
+            // STEP 3: Extract mapped device IDs
+            var mappedDeviceIds = mappings
+                .Select(m => m.DeviceId)
+                .Distinct()
+                .ToList();
+
+            // STEP 4: Load devices + configuration + slaves + registers
+            var devices = await _db.Devices
+                .AsNoTracking()
+                .Where(d => mappedDeviceIds.Contains(d.DeviceId) && !d.IsDeleted)
+                .Include(d => d.DeviceConfiguration)
+                .Include(d => d.DeviceSlave)
+                    .ThenInclude(s => s.Registers)
+                .ToListAsync(ct);
+
+            if (!devices.Any())
+                return new List<DeviceConfigurationResponseDto>();
+
+            // STEP 5: Build lookup for mapped registers per device
+            var mappedRegistersByDevice = mappings
+                .GroupBy(m => m.DeviceId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(x => x.RegisterId).ToHashSet()
+                );
+
+            // STEP 6: Build response
+            var result = devices.Select(device => new DeviceConfigurationResponseDto
+            {
+                DeviceId = device.DeviceId,
+                Name = device.Name,
+                Protocol = device.Protocol ?? string.Empty,
+                PollIntervalMs = device.DeviceConfiguration?.PollIntervalMs ?? 1000,
+                IpAddress = device.DeviceConfiguration?.IpAddress ?? "127.0.0.1",
+                Port = device.DeviceConfiguration?.Port ?? 502,
+                SlaveId = (byte)(device.DeviceConfiguration?.SlaveId ?? 1),
+                Endian = device.DeviceConfiguration?.Endian ?? "Little",
+
+
+                Slaves = device.DeviceSlave
+                      .Where(s => s.IsHealthy)
+                      .Select(s => new SlaveDto
                       {
-                          RegisterId = r.RegisterId,            
-                          RegisterAddress = r.RegisterAddress,
-                          RegisterLength = r.RegisterLength,
-                          DataType = r.DataType,
-                          Scale = r.Scale,
-                          Unit = r.Unit,
-                          ByteOrder = r.ByteOrder,
-                          WordSwap = r.WordSwap,
-                          IsHealthy = r.IsHealthy
+                          DeviceSlaveId = s.deviceSlaveId,
+                          SlaveIndex = s.slaveIndex,
+                          IsHealthy = s.IsHealthy,
+
+                          Registers = s.Registers
+                              .Where(r =>
+                                  r.IsHealthy &&
+                                  mappedRegistersByDevice.TryGetValue(device.DeviceId, out var registerIds) &&
+                                  registerIds.Contains(r.RegisterId)
+                              )
+                              .OrderBy(r => r.RegisterAddress)
+                              .Select(r => new DeviceRegisterDto
+                              {
+                                  RegisterId = r.RegisterId,
+                                  RegisterAddress = r.RegisterAddress,
+                                  RegisterLength = r.RegisterLength,
+                                  DataType = r.DataType,
+                                  Scale = r.Scale,
+                                  Unit = r.Unit,
+                                  ByteOrder = r.ByteOrder,
+                                  WordSwap = r.WordSwap,
+                                  IsHealthy = r.IsHealthy
+                              })
+                              .ToList()
                       })
                       .ToList()
-              })
-              .ToList()
-      }).ToList();
-  
-     return result;
-    }
+            }).ToList();
+
+            return result;
+        }
 
     }
 }

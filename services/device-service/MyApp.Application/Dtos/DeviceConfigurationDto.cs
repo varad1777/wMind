@@ -11,9 +11,12 @@ namespace MyApp.Application.Dtos
         [Range(100, 300000, ErrorMessage = "Poll interval must be between 100 and 300000 milliseconds.")]
         public int PollIntervalMs { get; set; } = 1000;
 
-        [Required(ErrorMessage = "Protocol settings are required.")]
-        public string ProtocolSettingsJson { get; set; } = "{}";
+        public string IpAddress { get; set; } = "127.0.0.1";
+        public int Port { get; set; } = 502;
+        public byte SlaveId { get; set; } = 1;
+        public string Endian { get; set; } = "Little";
+
     }
 
-   
+
 }

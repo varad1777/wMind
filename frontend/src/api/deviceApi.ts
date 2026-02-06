@@ -17,8 +17,12 @@ export interface DevicePort {
 export interface DeviceConfiguration {
   name: string;
   pollIntervalMs: number;
-  protocolSettingsJson: string;
+  ipAddress: string;
+  port: number;
+  slaveId: number;
+  endian: "Little" | "Big";
 }
+
 
 export interface CreateDevicePayload {
   name: string;

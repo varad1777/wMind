@@ -7,7 +7,7 @@ import {
   Search,
   HdmiPort,
   AlertTriangle,
-  View
+  View,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getDevices, deleteDevice } from "@/api/deviceApi";
@@ -28,7 +28,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { useAuth } from "@/context/AuthContext"; 
+import { useAuth } from "@/context/AuthContext";
 import { Spinner } from "@/components/ui/spinner";
 
 interface Device {
@@ -40,7 +40,10 @@ interface Device {
     configurationId: string;
     name: string;
     pollIntervalMs: number;
-    protocolSettingsJson: string;
+    ipAddress: string;
+    port: number;
+    slaveId: number;
+    endian: string;
   };
 }
 
@@ -61,8 +64,7 @@ export default function Devices() {
   const [totalPages, setTotalPages] = useState(1);
 
   const navigate = useNavigate();
-  const { user } = useAuth(); 
-
+  const { user } = useAuth();
 
   function readSelectedDevices(): SelectedDevice[] {
     try {
@@ -74,7 +76,9 @@ export default function Devices() {
         .map((x) => {
           if (x && typeof x === "object") {
             const id = String((x as any).deviceId ?? (x as any).id ?? "");
-            const name = String((x as any).name ?? (x as any).displayName ?? "");
+            const name = String(
+              (x as any).name ?? (x as any).displayName ?? "",
+            );
             if (id) return { deviceId: id, name };
           }
           return null;
@@ -85,9 +89,9 @@ export default function Devices() {
     }
   }
 
-  const [sessionSelectedDevices, setSessionSelectedDevices] = useState<SelectedDevice[]>(
-    () => readSelectedDevices()
-  );
+  const [sessionSelectedDevices, setSessionSelectedDevices] = useState<
+    SelectedDevice[]
+  >(() => readSelectedDevices());
 
   useEffect(() => {
     function onStorage(e: StorageEvent) {
@@ -127,12 +131,15 @@ export default function Devices() {
     try {
       await deleteDevice(selectedDevice.deviceId);
       setDevices((prev) =>
-        prev.filter((d) => d.deviceId !== selectedDevice.deviceId)
+        prev.filter((d) => d.deviceId !== selectedDevice.deviceId),
       );
       toast.success(`Device "${selectedDevice.name}" deleted successfully!`);
-    } catch (err:any) {
+    } catch (err: any) {
       console.error("Error deleting device:", err);
-      toast.error( err?.response?.data?.error || "Failed to delete device. Please try again.");
+      toast.error(
+        err?.response?.data?.error ||
+          "Failed to delete device. Please try again.",
+      );
     } finally {
       setOpenDialog(false);
       setSelectedDevice(null);
@@ -168,14 +175,11 @@ export default function Devices() {
 
   return (
     <div className="p-2 space-y-2">
-   
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Devices</h1>
           <p className="text-muted-foreground">Manage all connected devices</p>
         </div>
-
-        
       </div>
 
       {/* Search */}
@@ -190,31 +194,39 @@ export default function Devices() {
             className="w-full pl-9 pr-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
         </div>
-          <div className="flex flex-row gap-2">
-            <Button id="add-device-btn"
-              onClick={() => navigate("/devices/add")}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              + Add Device
-            </Button>
+        <div className="flex flex-row gap-2">
+          <Button
+            id="add-device-btn"
+            onClick={() => navigate("/devices/add")}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            + Add Device
+          </Button>
 
           {isAdmin && (
-            <Button id="import-bulk-btn"
+            <Button
+              id="import-bulk-btn"
               onClick={() => navigate("/devices/upload")}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               + Import Bulk
             </Button>
           )}
-          </div>
         </div>
+      </div>
 
-      {loading && <div className="w-full h-full flex justify-center items-center">
-      <Spinner /></div>}
+      {loading && (
+        <div className="w-full h-full flex justify-center items-center">
+          <Spinner />
+        </div>
+      )}
       {error && <div className="text-center text-destructive">{error}</div>}
 
       {!loading && !error && (
-        <div id="device-list" className="rounded-lg border border-border bg-card shadow-sm overflow-hidden">
+        <div
+          id="device-list"
+          className="rounded-lg border border-border bg-card shadow-sm overflow-hidden"
+        >
           <table className="w-full text-sm text-foreground">
             <thead className="bg-muted/40 text-left">
               <tr>
@@ -227,76 +239,90 @@ export default function Devices() {
               {devices.map((d) => {
                 const isSelected = isDeviceSelected(d.deviceId);
                 return (
-                  <tr key={d.deviceId} className="border-t border-border hover:bg-muted/20 transition-colors">
+                  <tr
+                    key={d.deviceId}
+                    className="border-t border-border hover:bg-muted/20 transition-colors"
+                  >
                     <td className="p-4 font-medium">{d.name}</td>
                     <td className="p-4">{d.description}</td>
                     <td className="p-4 flex justify-center">
                       <div className="grid grid-cols-2 md:flex md:flex-row gap-2 w-full justify-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          title="Edit"
+                          onClick={() =>
+                            navigate(`/devices/edit/${d.deviceId}`)
+                          }
+                          className="flex items-center gap-1 edit-device-btn"
+                        >
+                          <Settings className="h-4 w-4" />
+                          <span className="hidden md:inline">Edit</span>
+                        </Button>
+
+                        {!d.deviceConfiguration && (
                           <Button
-                              variant="outline"
-                              size="sm"
-                              title="Edit"
-                              onClick={() => navigate(`/devices/edit/${d.deviceId}`)}
-                              className="flex items-center gap-1 edit-device-btn"
-                            >
-                              <Settings className="h-4 w-4" />
-                              <span className="hidden md:inline">Edit</span>
-                            </Button>
-
-
-                          {!d.deviceConfiguration && (
-                            <Button
                             variant="outline"
                             size="sm"
                             title="Config"
-                            onClick={() => navigate(`/devices/config/${d.deviceId}`)}
+                            onClick={() =>
+                              navigate(`/devices/config/${d.deviceId}`)
+                            }
                             className="flex items-center gap-1 config-device-btn"
                           >
                             <Wrench className="h-4 w-4" />
                             <span className="hidden md:inline">Config</span>
                           </Button>
-                          )}
-                       {isAdmin && (
+                        )}
+                        {isAdmin && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            title="Delete"
+                            onClick={() => {
+                              setSelectedDevice(d);
+                              setOpenDialog(true);
+                            }}
+                            className="flex items-center gap-1"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="hidden md:inline delete-device-btn">
+                              Delete
+                            </span>
+                          </Button>
+                        )}
+
                         <Button
                           variant="outline"
                           size="sm"
-                          title="Delete"
-                          onClick={() => {
-                            setSelectedDevice(d);
-                            setOpenDialog(true);
-                          }}
+                          title="Slave"
+                          onClick={() =>
+                            navigate(`/devices/ports/${d.deviceId}`)
+                          }
                           className="flex items-center gap-1"
                         >
-                          <Trash2 className="h-4 w-4" />
-                          <span className="hidden md:inline delete-device-btn">Delete</span>
-                        </Button>
-                      )}
-                             
-                     <Button
-                        variant="outline"
-                        size="sm"
-                        title="Slave"
-                        onClick={() => navigate(`/devices/ports/${d.deviceId}`)}
-                        className="flex items-center gap-1"
-                      >
-                        <HdmiPort className="h-4 w-4" />
-                        <span className="hidden md:inline slave-device-btn">Slave</span>
-                      </Button>
-
-                      {d.deviceConfiguration && (
-                        <Button
-                          variant={isSelected ? "destructive" : "outline"}
-                          size="sm"
-                          title={isSelected ? "Unsubscribe" : "Subscribe"}
-                          onClick={() => toggleSelectedDevice(d.name, d.deviceId)}
-                          className="flex items-center gap-1"
-                        >
-                          <View className="h-4 w-4" />
-                          <span className="hidden md:inline">
-                            {isSelected ? "Unsubscribe" : "Subscribe"}
+                          <HdmiPort className="h-4 w-4" />
+                          <span className="hidden md:inline slave-device-btn">
+                            Slave
                           </span>
                         </Button>
-                      )}
+
+                        {d.deviceConfiguration && (
+                          <Button
+                            variant={isSelected ? "destructive" : "outline"}
+                            size="sm"
+                            title={isSelected ? "Unsubscribe" : "Subscribe"}
+                            onClick={() =>
+                              toggleSelectedDevice(d.name, d.deviceId)
+                            }
+                            className="flex items-center gap-1"
+                          >
+                            <View className="h-4 w-4" />
+                            <span className="hidden md:inline">
+                              {isSelected ? "Unsubscribe" : "Subscribe"}
+                            </span>
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -305,7 +331,10 @@ export default function Devices() {
 
               {devices.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="text-center p-6 text-muted-foreground">
+                  <td
+                    colSpan={3}
+                    className="text-center p-6 text-muted-foreground"
+                  >
                     No devices found.
                   </td>
                 </tr>
@@ -412,7 +441,6 @@ export default function Devices() {
                 Yes, Delete it
               </Button>
             </DialogFooter>
-
           </div>
         </DialogContent>
       </Dialog>

@@ -22,12 +22,10 @@ export default function ConfigureDevice() {
   const [formData, setFormData] = useState({
     configName: "",
     pollInterval: 1000,
-    protocolSettings: {
-      IpAddress: "127.0.0.1",
-      Port: 5020,
-      SlaveId: 1,
-      Endian: "Little",
-    },
+    ipAddress: "127.0.0.1",
+    port: 502,
+    slaveId: 1,
+    endian: "Little",
   });
 
   /* ===========================
@@ -46,31 +44,15 @@ export default function ConfigureDevice() {
           gatewayClientId: res.gatewayClientId ?? "",
         });
 
-        let protocolSettings = {
-          IpAddress: "127.0.0.1",
-          Port: 5020,
-          SlaveId: 1,
-          Endian: "Little",
-        };
-
-        try {
-          if (res.configuration?.protocolSettingsJson) {
-            protocolSettings = JSON.parse(
-              res.configuration.protocolSettingsJson
-            );
-          }
-        } catch (err) {
-          console.error("Invalid protocolSettingsJson", err);
-        }
-
         setFormData({
-          configName:
-            res.configuration?.name ?? `${res.name}_config`,
-          pollInterval:
-            res.configuration?.pollIntervalMs ?? 1000,
-          protocolSettings,
+          configName: res.configuration?.name ?? `${res.name}_config`,
+          pollInterval: res.configuration?.pollIntervalMs ?? 1000,
+          ipAddress: res.configuration?.ipAddress ?? "127.0.0.1",
+          port: res.configuration?.port ?? 502,
+          slaveId: res.configuration?.slaveId ?? 1,
+          endian: res.configuration?.endian ?? "Little",
         });
-      } catch (error: any) {
+      } catch (error) {
         toast.error("Failed to load device");
         navigate("/devices");
       }
@@ -87,24 +69,12 @@ export default function ConfigureDevice() {
 
     setFormData((prev) => ({
       ...prev,
-      [name]: name === "pollInterval" ? Number(value) : value,
-    }));
-  };
-
-  const handleProtocolChange = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const { name, value } = e.target;
-
-    setFormData((prev) => ({
-      ...prev,
-      protocolSettings: {
-        ...prev.protocolSettings,
-        [name]:
-          name === "Port" || name === "SlaveId"
-            ? Number(value)
-            : value,
-      },
+      [name]:
+        name === "pollInterval" ||
+        name === "port" ||
+        name === "slaveId"
+          ? Number(value)
+          : value,
     }));
   };
 
@@ -112,8 +82,7 @@ export default function ConfigureDevice() {
      VALIDATION
   ============================ */
   const validateForm = () => {
-    const { configName, pollInterval, protocolSettings } = formData;
-    const { IpAddress, Port, SlaveId } = protocolSettings;
+    const { configName, pollInterval, ipAddress, port, slaveId } = formData;
 
     if (!configName.trim()) {
       toast.error("Configuration name is required");
@@ -128,17 +97,17 @@ export default function ConfigureDevice() {
     const ipRegex =
       /^(25[0-5]|2[0-4]\d|1?\d{1,2})(\.(25[0-5]|2[0-4]\d|1?\d{1,2})){3}$/;
 
-    if (!ipRegex.test(IpAddress)) {
+    if (!ipRegex.test(ipAddress)) {
       toast.error("Invalid IP Address");
       return false;
     }
 
-    if (Port < 1 || Port > 65535) {
+    if (port < 1 || port > 65535) {
       toast.error("Port must be 1–65535");
       return false;
     }
 
-    if (SlaveId < 1 || SlaveId > 247) {
+    if (slaveId < 1 || slaveId > 247) {
       toast.error("Slave ID must be 1–247");
       return false;
     }
@@ -168,9 +137,10 @@ export default function ConfigureDevice() {
         {
           name: formData.configName,
           pollIntervalMs: formData.pollInterval,
-          protocolSettingsJson: JSON.stringify(
-            formData.protocolSettings
-          ),
+          ipAddress: formData.ipAddress,
+          port: formData.port,
+          slaveId: formData.slaveId,
+          endian: formData.endian as "Little" | "Big",
         }
       );
 
@@ -178,8 +148,7 @@ export default function ConfigureDevice() {
       navigate("/devices");
     } catch (err: any) {
       toast.error(
-        err?.response?.data?.message ??
-          "Failed to update device"
+        err?.response?.data?.message ?? "Failed to update device"
       );
     } finally {
       setLoading(false);
@@ -220,37 +189,35 @@ export default function ConfigureDevice() {
 
             <hr />
 
-            <p className="text-sm font-semibold">
-              Protocol Settings
-            </p>
+            <p className="text-sm font-semibold">Protocol Settings</p>
 
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <Label>IP Address</Label>
                 <Input
-                  name="IpAddress"
-                  value={formData.protocolSettings.IpAddress}
-                  onChange={handleProtocolChange}
+                  name="ipAddress"
+                  value={formData.ipAddress}
+                  onChange={handleChange}
                 />
               </div>
 
               <div>
                 <Label>Port</Label>
                 <Input
-                  name="Port"
+                  name="port"
                   type="number"
-                  value={formData.protocolSettings.Port}
-                  onChange={handleProtocolChange}
+                  value={formData.port}
+                  onChange={handleChange}
                 />
               </div>
 
               <div>
                 <Label>Slave ID</Label>
                 <Input
-                  name="SlaveId"
+                  name="slaveId"
                   type="number"
-                  value={formData.protocolSettings.SlaveId}
-                  onChange={handleProtocolChange}
+                  value={formData.slaveId}
+                  onChange={handleChange}
                 />
               </div>
             </div>
