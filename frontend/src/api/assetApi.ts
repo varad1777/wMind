@@ -210,18 +210,20 @@ export const getSignalTypes = async (): Promise<SignalType[]> => {
 /* --------------------------------------------------------
     MAPPING / SIGNAL APIS
 -------------------------------------------------------- */
+// ✅ CORRECTED - matches backend endpoint
 export const getSignalOnAsset = async (assetId: string): Promise<IMapping[]> => {
   try {
-    const res = await apiAsset.get(`/Mapping/${assetId}`);
+    const res = await apiAsset.get(`/Mapping/mappings/${assetId}`);
     return res.data as IMapping[];
   } catch (err) {
     throw handleApiError(err, "Failed to fetch signals for asset");
   }
 };
 
+// ✅ CORRECTED - matches backend endpoint
 export const getMappingById = async (id: string): Promise<IMapping[]> => {
   try {
-    const res = await apiAsset.get(`/Mapping/${id}`);
+    const res = await apiAsset.get(`/Mapping/signals/${id}`);
     return res.data as IMapping[];
   } catch (err) {
     throw handleApiError(err, "Failed to fetch mapping by ID");
