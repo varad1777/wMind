@@ -9,17 +9,29 @@ namespace MyApp.Application.Dtos
     public class DeviceConfigurationResponseDto
     {
         public Guid DeviceId { get; set; }
+
         public string Name { get; set; } = string.Empty;
-        public string Protocol { get; set; } = string.Empty;
-        public int PollIntervalMs { get; set; }
-        public string IpAddress { get; set; } = "127.0.0.1";
-        public int Port { get; set; } = 502;
-        public byte SlaveId { get; set; } = 1;
-        public string Endian { get; set; } = "Little";
+
+        public DeviceProtocol Protocol { get; set; }
+
+        // OPC UA
+        public string? ConnectionString { get; set; }
+
+        public OpcUaConnectionMode? ConnectionMode { get; set; }
+
+        public int? PollIntervalMs { get; set; }
+
+        // MODBUS
+        public string? IpAddress { get; set; }
+
+        public int? Port { get; set; }
+
+        public int? SlaveId { get; set; }
+
+        public string? Endian { get; set; }
 
         public List<SlaveDto> Slaves { get; set; } = new();
     }
-
     public class DeviceRegisterDto
     {
         public Guid RegisterId { get; set; }

@@ -11,19 +11,40 @@ namespace MyApp.Domain.Entities
         [Required]
         public string Name { get; set; } = null!;
 
-        public int PollIntervalMs { get; set; } = 1000;
+        // Protocol selector
+        public DeviceProtocol Protocol { get; set; }
 
-        // Protocol settings (previously stored as JSON)
-        [Required]
-        public string IpAddress { get; set; } = null!;
+        // OPC UA only
+        public string? ConnectionString { get; set; }
 
-        public int Port { get; set; }
+        public OpcUaConnectionMode? ConnectionMode { get; set; }
 
-        public int SlaveId { get; set; }
+        // Polling:
+        // Modbus → always used
+        // OPC UA → only when Polling
+        public int? PollIntervalMs { get; set; } = 1000;
 
-        [Required]
-        public string Endian { get; set; } = "Little"; // or Big
+        // MODBUS only
+        public string? IpAddress { get; set; }
+
+        public int? Port { get; set; }
+
+        public int? SlaveId { get; set; }
+
+        public string? Endian { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    public enum DeviceProtocol
+    {
+        Modbus = 1,
+        OpcUa = 2
+    }
+
+    public enum OpcUaConnectionMode
+    {
+        Polling = 1,
+        PubSub = 2
     }
 }

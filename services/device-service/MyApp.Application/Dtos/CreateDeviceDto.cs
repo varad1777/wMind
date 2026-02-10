@@ -1,13 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
+using MyApp.Domain.Entities;
 
 namespace MyApp.Application.Dtos
 {
-    public class CreateDeviceDto
+    public class DeviceConfigurationDto
     {
-        [Required(ErrorMessage = "Device name is required.")]
-        [StringLength(100, MinimumLength = 3, ErrorMessage = "Device name must be between 3 and 100 characters.")]
+        [Required(ErrorMessage = "Configuration name is required.")]
+        [StringLength(100, MinimumLength = 1)]
         public string Name { get; set; } = null!;
 
         [StringLength(255, ErrorMessage = "Description cannot exceed 255 characters.")]
@@ -47,7 +46,27 @@ namespace MyApp.Application.Dtos
 
         [StringLength(50, ErrorMessage = "Unit cannot exceed 50 characters.")]
         public string? Unit { get; set; }
+        // 🔹 NEW
+        [Required]
+        public DeviceProtocol Protocol { get; set; }
 
-        public bool IsHealthy { get; set; } = true;
+        // 🔹 OPC UA only
+        public string? ConnectionString { get; set; }
+
+        public OpcUaConnectionMode? ConnectionMode { get; set; }
+
+        // 🔹 Modbus → required
+        // 🔹 OPC UA → required ONLY when Polling
+        [Range(100, 300000)]
+        public int? PollIntervalMs { get; set; }
+
+        // 🔹 MODBUS only
+        public string? IpAddress { get; set; }
+
+        public int? Port { get; set; }
+
+        public int? SlaveId { get; set; }
+
+        public string? Endian { get; set; }
     }
 }

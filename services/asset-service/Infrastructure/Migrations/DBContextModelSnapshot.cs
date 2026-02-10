@@ -276,6 +276,45 @@ namespace Infrastructure.Migrations
                     b.ToTable("ReportRequests");
                 });
 
+            modelBuilder.Entity("Domain.Entities.Signal", b =>
+                {
+                    b.Property<Guid>("SignalId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("DeviceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("SignalKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("SignalName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("SignalId");
+
+                    b.HasIndex("AssetId", "DeviceId", "SignalKey")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Signal_AssetDeviceKey");
+
+                    b.ToTable("Signals");
+                });
+
             modelBuilder.Entity("Domain.Entities.SignalData", b =>
                 {
                     b.Property<long>("SignalDataId")
