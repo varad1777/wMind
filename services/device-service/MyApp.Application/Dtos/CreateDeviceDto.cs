@@ -3,7 +3,7 @@ using MyApp.Domain.Entities;
 
 namespace MyApp.Application.Dtos
 {
-    public class DeviceConfigurationDto
+    public class CreateDeviceDto
     {
         [Required(ErrorMessage = "Configuration name is required.")]
         [StringLength(100, MinimumLength = 1)]
@@ -14,8 +14,7 @@ namespace MyApp.Application.Dtos
 
         // ONLY ADDITION: Protocol (Modbus or OPCUA)
         [Required(ErrorMessage = "Protocol is required.")]
-        [RegularExpression("^(Modbus|OPCUA)$", ErrorMessage = "Protocol must be either Modbus or OPCUA.")]
-        public string Protocol { get; set; } = "Modbus";
+        public DeviceProtocol Protocol { get; set; } 
 
         public List<DeviceSlaveDto>? Ports { get; set; }
 
@@ -46,27 +45,8 @@ namespace MyApp.Application.Dtos
 
         [StringLength(50, ErrorMessage = "Unit cannot exceed 50 characters.")]
         public string? Unit { get; set; }
-        // 🔹 NEW
-        [Required]
-        public DeviceProtocol Protocol { get; set; }
 
-        // 🔹 OPC UA only
-        public string? ConnectionString { get; set; }
+        public bool WordSwap { get; set; }
 
-        public OpcUaConnectionMode? ConnectionMode { get; set; }
-
-        // 🔹 Modbus → required
-        // 🔹 OPC UA → required ONLY when Polling
-        [Range(100, 300000)]
-        public int? PollIntervalMs { get; set; }
-
-        // 🔹 MODBUS only
-        public string? IpAddress { get; set; }
-
-        public int? Port { get; set; }
-
-        public int? SlaveId { get; set; }
-
-        public string? Endian { get; set; }
     }
 }

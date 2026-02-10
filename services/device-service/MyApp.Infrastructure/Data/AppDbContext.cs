@@ -23,8 +23,15 @@ namespace MyApp.Infrastructure.Data
             mb.Entity<Device>()
               .HasKey(d => d.DeviceId);
 
-            // Device → DeviceSlaveSets (keep for other functionality)
-          
+            // Store Protocol as string in the database
+            mb.Entity<Device>()
+                .Property(d => d.Protocol)
+                .HasConversion<string>();
+
+            // DEVICE CONFIGURATION - Store Protocol as string in the database
+            mb.Entity<DeviceConfiguration>()
+                .Property(dc => dc.Protocol)
+                .HasConversion<string>();
 
             // Device → DeviceSlaves
             mb.Entity<Device>()

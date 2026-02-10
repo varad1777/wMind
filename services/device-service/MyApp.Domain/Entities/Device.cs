@@ -14,7 +14,7 @@ namespace MyApp.Domain.Entities
         public string GatewayId {get; set;}
         public string Name { get; set; } = null!;
         public string? Description { get; set; }
-        public string? Protocol { get; set; } = "ModbusTCP";
+        public DeviceProtocol Protocol { get; set; } 
         public Boolean IsDeleted { get; set; } = false;
         public Guid? DeviceConfigurationId { get; set; }
         public DeviceConfiguration? DeviceConfiguration { get; set; }

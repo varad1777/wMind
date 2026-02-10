@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MyApp.Domain.Entities;
 
 namespace MyApp.Application.Dtos
 {
@@ -54,7 +55,7 @@ namespace MyApp.Application.Dtos
         public Guid DeviceId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
-        public string? Protocol { get; set; }
+        public DeviceProtocol Protocol { get; set; }
         public List<MatchedSlaveDto> MatchedSlaves { get; set; } = new();
     }
 }

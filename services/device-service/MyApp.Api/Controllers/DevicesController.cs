@@ -63,7 +63,7 @@ namespace MyApp.Api.Controllers
         // GET /api/devices
         [HttpGet]
         [AllowAnonymous]
-        
+
         public async Task<IActionResult> GetAll(
             int pageNumber = 1,
             int pageSize = 10,
@@ -429,7 +429,7 @@ namespace MyApp.Api.Controllers
             catch (ArgumentException aex)
             {
                 return BadRequest(ApiResponse<object>.Fail(aex.Message));
-                
+
             }
             catch (OperationCanceledException)
             {
@@ -467,11 +467,11 @@ namespace MyApp.Api.Controllers
 
 
 
- [HttpGet("configurations/gateway/{gatewayId}")]
+        [HttpGet("configurations/gateway/{gatewayId}")]
         [Authorize(Policy = "GatewayOnly")]
         public async Task<IActionResult> GetConfigurationsByGateway(
-           string gatewayId,
-           CancellationToken ct = default)
+                  string gatewayId,
+                  CancellationToken ct = default)
         {
             if (string.IsNullOrEmpty(gatewayId))
                 return BadRequest(ApiResponse<object>.Fail("GatewayId is required."));

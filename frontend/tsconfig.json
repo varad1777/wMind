@@ -16,6 +16,8 @@
       ]
     },
     "noUnusedLocals": false,
-    "noUnusedParameters": false
+    "noUnusedParameters": false,
+    "verbatimModuleSyntax": false,
+    "erasableSyntaxOnly": false
   }
 }

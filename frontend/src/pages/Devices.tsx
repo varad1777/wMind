@@ -260,20 +260,18 @@ export default function Devices() {
                           <span className="hidden md:inline">Edit</span>
                         </Button>
 
-                        {!d.deviceConfiguration && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            title="Config"
-                            onClick={() =>
-                              navigate(`/devices/config/${d.deviceId}`)
-                            }
-                            className="flex items-center gap-1 config-device-btn"
-                          >
-                            <Wrench className="h-4 w-4" />
-                            <span className="hidden md:inline">Config</span>
-                          </Button>
-                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          title="Config"
+                          onClick={() =>
+                            navigate(`/devices/config/${d.deviceId}`)
+                          }
+                          className="flex items-center gap-1 config-device-btn"
+                        >
+                          <Wrench className="h-4 w-4" />
+                          <span className="hidden md:inline">Config</span>
+                        </Button>
                         {isAdmin && (
                           <Button
                             variant="outline"

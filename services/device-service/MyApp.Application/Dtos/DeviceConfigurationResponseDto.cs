@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MyApp.Domain.Entities;
 
 namespace MyApp.Application.Dtos
 {
@@ -52,6 +53,8 @@ namespace MyApp.Application.Dtos
         public bool IsHealthy { get; set; }
         public List<DeviceRegisterDto> Registers { get; set; } = new();
     }
+
+    
 
 
 

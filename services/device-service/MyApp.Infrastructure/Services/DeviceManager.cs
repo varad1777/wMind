@@ -22,59 +22,70 @@ namespace MyApp.Infrastructure.Services
             _assetDb = assetDb;
         }
 
-        public async Task<Guid> CreateDeviceAsync(CreateDeviceDto request, CancellationToken ct = default)
+        public async Task<Guid> CreateDeviceAsync(
+            CreateDeviceDto request,
+            CancellationToken ct = default)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
 
-            var name = (request.Name ?? string.Empty).Trim();
-            if (string.IsNullOrEmpty(name))
+            var name = request.Name?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("Device name is required.", nameof(request.Name));
 
-            if (string.IsNullOrEmpty(request.GatewayClientId))
-                throw new ArgumentException("Gateway Client is required", nameof(request.GatewayClientId));
-
-            // ONLY ADDITION: protocol validation
-            if (string.IsNullOrWhiteSpace(request.Protocol) ||
-                (request.Protocol != "Modbus" && request.Protocol != "OPCUA"))
-                throw new ArgumentException("Protocol must be either Modbus or OPCUA.", nameof(request.Protocol));
+            if (string.IsNullOrWhiteSpace(request.GatewayClientId))
+                throw new ArgumentException("Gateway Client is required.",
+                                            nameof(request.GatewayClientId));
 
             const int MaxDevices = 20;
-            var currentCount = await _db.Devices.CountAsync(d => !d.IsDeleted, ct);
-            if (currentCount >= MaxDevices)
-                throw new InvalidOperationException($"Cannot create more than {MaxDevices} devices.");
+            var currentCount =
+                await _db.Devices.CountAsync(d => !d.IsDeleted, ct);
 
-            var exists = await _db.Devices.AsNoTracking()
-                .AnyAsync(d => !d.IsDeleted && d.Name.ToLower() == name.ToLower(), ct);
+            if (currentCount >= MaxDevices)
+                throw new InvalidOperationException(
+                    $"Cannot create more than {MaxDevices} devices.");
+
+            var exists =
+                await _db.Devices.AsNoTracking()
+                    .AnyAsync(d => !d.IsDeleted &&
+                                   d.Name.ToLower() == name.ToLower(),
+                              ct);
 
             if (exists)
-                throw new InvalidOperationException($"Device name '{name}' already exists.");
+                throw new InvalidOperationException(
+                    $"Device name '{name}' already exists.");
 
-            await using var tx = await _db.Database.BeginTransactionAsync(ct);
+            await using var tx =
+                await _db.Database.BeginTransactionAsync(ct);
 
-            var device = new Device
-            {
-                DeviceId = Guid.NewGuid(),
-                Name = name,
-                Description = string.IsNullOrWhiteSpace(request.Description)
-                    ? null
-                    : request.Description.Trim(),
-                GatewayId = request.GatewayClientId.ToString(),
+            var device =
+                new Device
+                {
+                    DeviceId = Guid.NewGuid(),
+                    Name = name,
+                    Description =
+                        string.IsNullOrWhiteSpace(request.Description)
+                            ? null
+                            : request.Description.Trim(),
 
-                // ONLY ADDITION: assign protocol
-                Protocol = request.Protocol
-            };
+                    GatewayId = request.GatewayClientId,
+                    Protocol = request.Protocol
+                };
 
             await _db.Devices.AddAsync(device, ct);
 
-            // CONFIGURATION (Protocol-aware)
-
+            // ---------------- Configuration ----------------
             if (request.Configuration != null)
             {
                 var cfgDto = request.Configuration;
 
-                // 🔹 PROTOCOL VALIDATION
-                if (cfgDto.Protocol == DeviceProtocol.Modbus)
+                if (string.IsNullOrWhiteSpace(cfgDto.Name) || cfgDto.Name.Length > 100)
+                    throw new ArgumentException(
+                        "Configuration name must be between 1 and 100 characters.",
+                        nameof(cfgDto.Name));
+
+                // -------- Protocol validation --------
+                if (request.Protocol == DeviceProtocol.Modbus)
                 {
                     if (string.IsNullOrWhiteSpace(cfgDto.IpAddress))
                         throw new ArgumentException("IpAddress is required for Modbus");
@@ -85,54 +96,73 @@ namespace MyApp.Infrastructure.Services
                     if (!cfgDto.SlaveId.HasValue || cfgDto.SlaveId < 0 || cfgDto.SlaveId > 247)
                         throw new ArgumentOutOfRangeException(nameof(cfgDto.SlaveId));
                 }
-                else if (cfgDto.Protocol == DeviceProtocol.OpcUa)
+                else if (request.Protocol == DeviceProtocol.OpcUa)
                 {
                     if (string.IsNullOrWhiteSpace(cfgDto.ConnectionString))
-                        throw new ArgumentException("ConnectionString is required for OPC UA");
+                        throw new ArgumentException(
+                            "ConnectionString is required for OPC UA");
 
                     if (!cfgDto.ConnectionMode.HasValue)
-                        throw new ArgumentException("ConnectionMode is required for OPC UA");
+                        throw new ArgumentException(
+                            "ConnectionMode is required for OPC UA");
 
                     if (cfgDto.ConnectionMode == OpcUaConnectionMode.Polling &&
                         !cfgDto.PollIntervalMs.HasValue)
-                        throw new ArgumentException("PollIntervalMs is required for OPC UA Polling");
+                        throw new ArgumentException(
+                            "PollIntervalMs is required for OPC UA Polling");
                 }
                 else
                 {
                     throw new InvalidOperationException("Unsupported protocol");
                 }
 
-                var cfg = new DeviceConfiguration
-                {
-                    ConfigurationId = Guid.NewGuid(),
-                    Name = string.IsNullOrWhiteSpace(cfgDto.Name)
-                        ? $"{device.Name}-cfg"
-                        : cfgDto.Name.Trim(),
+                var cfg =
+                    new DeviceConfiguration
+                    {
+                        ConfigurationId = Guid.NewGuid(),
+                        Name = cfgDto.Name.Trim(),
+                        Protocol = request.Protocol,
 
-                    Protocol = cfgDto.Protocol,
+                        // OPC UA
+                        ConnectionString =
+                            request.Protocol == DeviceProtocol.OpcUa
+                                ? cfgDto.ConnectionString
+                                : null,
 
-                    // OPC UA
-                    ConnectionString = cfgDto.Protocol == DeviceProtocol.OpcUa
-                        ? cfgDto.ConnectionString
-                        : null,
+                        ConnectionMode =
+                            request.Protocol == DeviceProtocol.OpcUa
+                                ? cfgDto.ConnectionMode
+                                : null,
 
-                    ConnectionMode = cfgDto.Protocol == DeviceProtocol.OpcUa
-                        ? cfgDto.ConnectionMode
-                        : null,
+                        // Polling
+                        PollIntervalMs =
+                            request.Protocol == DeviceProtocol.Modbus
+                                ? cfgDto.PollIntervalMs ?? 1000
+                                : cfgDto.ConnectionMode == OpcUaConnectionMode.Polling
+                                    ? cfgDto.PollIntervalMs
+                                    : null,
 
-                    // Polling
-                    PollIntervalMs = cfgDto.Protocol == DeviceProtocol.Modbus
-                        ? cfgDto.PollIntervalMs ?? 1000
-                        : cfgDto.ConnectionMode == OpcUaConnectionMode.Polling
-                            ? cfgDto.PollIntervalMs
-                            : null,
+                        // MODBUS
+                        IpAddress =
+                            request.Protocol == DeviceProtocol.Modbus
+                                ? cfgDto.IpAddress
+                                : null,
 
-                    // MODBUS
-                    IpAddress = cfgDto.Protocol == DeviceProtocol.Modbus ? cfgDto.IpAddress : null,
-                    Port = cfgDto.Protocol == DeviceProtocol.Modbus ? cfgDto.Port : null,
-                    SlaveId = cfgDto.Protocol == DeviceProtocol.Modbus ? cfgDto.SlaveId : null,
-                    Endian = cfgDto.Protocol == DeviceProtocol.Modbus ? cfgDto.Endian : null
-                };
+                        Port =
+                            request.Protocol == DeviceProtocol.Modbus
+                                ? cfgDto.Port
+                                : null,
+
+                        SlaveId =
+                            request.Protocol == DeviceProtocol.Modbus
+                                ? cfgDto.SlaveId
+                                : null,
+
+                        Endian =
+                            request.Protocol == DeviceProtocol.Modbus
+                                ? cfgDto.Endian
+                                : null
+                    };
 
                 await _db.DeviceConfigurations.AddAsync(cfg, ct);
                 device.DeviceConfigurationId = cfg.ConfigurationId;
@@ -144,6 +174,7 @@ namespace MyApp.Infrastructure.Services
             _log.LogInformation("Created device {DeviceId}", device.DeviceId);
             return device.DeviceId;
         }
+
 
         public async Task UpdateDeviceAsync(Guid deviceId, UpdateDeviceDto dto, DeviceConfigurationDto? configDto = null, CancellationToken ct = default)
         {
@@ -198,52 +229,21 @@ namespace MyApp.Infrastructure.Services
                 device.Description = trimmedDesc;
             }
 
-            if (dto.Protocol != null)
+            if (dto.Protocol.HasValue)
             {
-                var trimmedProto = dto.Protocol.Trim();
-                if (trimmedProto.Length == 0 || trimmedProto.Length > 100)
-                    throw new ArgumentException(
-                        "Protocol must be a non-empty value up to 100 characters.",
-                        nameof(dto.Protocol));
-                device.Protocol = trimmedProto;
+                // Optional: prevent protocol change when configuration exists
+                if (device.DeviceConfigurationId.HasValue)
+                    throw new InvalidOperationException(
+                        "Cannot change protocol when configuration already exists.");
+
+                device.Protocol = dto.Protocol.Value;
             }
+
 
             // ---------------- Configuration ----------------
             if (configDto != null)
             {
-                if (string.IsNullOrWhiteSpace(configDto.Name) || configDto.Name.Length > 100)
-                    throw new ArgumentException(
-                        "Configuration name must be between 1 and 100 characters.",
-                        nameof(configDto.Name));
-
-                // -------- Protocol validation --------
-                if (configDto.Protocol == DeviceProtocol.Modbus)
-                {
-                    if (string.IsNullOrWhiteSpace(configDto.IpAddress))
-                        throw new ArgumentException("IpAddress is required for Modbus");
-
-                    if (!configDto.Port.HasValue || configDto.Port <= 0 || configDto.Port > 65535)
-                        throw new ArgumentOutOfRangeException(nameof(configDto.Port));
-
-                    if (!configDto.SlaveId.HasValue || configDto.SlaveId < 0 || configDto.SlaveId > 247)
-                        throw new ArgumentOutOfRangeException(nameof(configDto.SlaveId));
-                }
-                else if (configDto.Protocol == DeviceProtocol.OpcUa)
-                {
-                    if (string.IsNullOrWhiteSpace(configDto.ConnectionString))
-                        throw new ArgumentException("ConnectionString is required for OPC UA");
-
-                    if (!configDto.ConnectionMode.HasValue)
-                        throw new ArgumentException("ConnectionMode is required for OPC UA");
-
-                    if (configDto.ConnectionMode == OpcUaConnectionMode.Polling &&
-                        !configDto.PollIntervalMs.HasValue)
-                        throw new ArgumentException("PollIntervalMs is required for OPC UA Polling");
-                }
-                else
-                {
-                    throw new InvalidOperationException("Unsupported protocol");
-                }
+                // ... existing validation code ...
 
                 // Helper to apply protocol-aware fields
                 void ApplyConfig(DeviceConfiguration cfg)
@@ -274,6 +274,8 @@ namespace MyApp.Infrastructure.Services
                     cfg.Endian = configDto.Protocol == DeviceProtocol.Modbus ? configDto.Endian : null;
                 }
 
+                DeviceConfiguration targetCfg;
+
                 if (device.DeviceConfigurationId is Guid cfgId)
                 {
                     var otherUses = await _db.Devices.AsNoTracking().AnyAsync(
@@ -281,69 +283,34 @@ namespace MyApp.Infrastructure.Services
 
                     if (!otherUses)
                     {
-                        var existingCfg = await _db.DeviceConfigurations.FindAsync(
-                            new object[] { cfgId }, ct);
-
-                        if (existingCfg == null)
+                        targetCfg = await _db.DeviceConfigurations.FindAsync(cfgId);
+                        if (targetCfg == null)
                         {
-                            var replacement = new DeviceConfiguration
-                            {
-                                ConfigurationId = Guid.NewGuid()
-                            };
-
-                            ApplyConfig(replacement);
-                            await _db.DeviceConfigurations.AddAsync(replacement, ct);
-                            device.DeviceConfigurationId = replacement.ConfigurationId;
-
-                            _log.LogWarning(
-                                "Device {DeviceId} referenced missing configuration {CfgId}; created replacement {ReplacementId}",
-                                deviceId, cfgId, replacement.ConfigurationId);
-                        }
-                        else
-                        {
-                            ApplyConfig(existingCfg);
-                            _db.DeviceConfigurations.Update(existingCfg);
-
-                            _log.LogInformation(
-                                "Updated DeviceConfiguration {CfgId} for device {DeviceId}",
-                                cfgId, deviceId);
+                            targetCfg = new DeviceConfiguration { ConfigurationId = Guid.NewGuid() };
+                            await _db.DeviceConfigurations.AddAsync(targetCfg, ct);
                         }
                     }
                     else
                     {
-                        var newCfg = new DeviceConfiguration
-                        {
-                            ConfigurationId = Guid.NewGuid()
-                        };
-
-                        ApplyConfig(newCfg);
-                        await _db.DeviceConfigurations.AddAsync(newCfg, ct);
-                        device.DeviceConfigurationId = newCfg.ConfigurationId;
-
-                        _log.LogInformation(
-                            "Configuration {CfgId} is shared; created new DeviceConfiguration {NewCfg} and attached to device {DeviceId}",
-                            cfgId, newCfg.ConfigurationId, deviceId);
+                        targetCfg = new DeviceConfiguration { ConfigurationId = Guid.NewGuid() };
+                        await _db.DeviceConfigurations.AddAsync(targetCfg, ct);
                     }
                 }
                 else
                 {
-                    var newCfg = new DeviceConfiguration
-                    {
-                        ConfigurationId = Guid.NewGuid()
-                    };
-
-                    ApplyConfig(newCfg);
-                    await _db.DeviceConfigurations.AddAsync(newCfg, ct);
-                    device.DeviceConfigurationId = newCfg.ConfigurationId;
-
-                    _log.LogInformation(
-                        "Created and attached new DeviceConfiguration {CfgId} to device {DeviceId}",
-                        newCfg.ConfigurationId, deviceId);
+                    targetCfg = new DeviceConfiguration { ConfigurationId = Guid.NewGuid() };
+                    await _db.DeviceConfigurations.AddAsync(targetCfg, ct);
                 }
+
+                ApplyConfig(targetCfg);
+                device.DeviceConfigurationId = targetCfg.ConfigurationId;
+
+               
+                _log.LogInformation(
+                    "Attached/updated configuration {CfgId} and set device {DeviceId} protocol to {Protocol}",
+                    targetCfg.ConfigurationId, deviceId, configDto.Protocol);
             }
 
-            await _db.SaveChangesAsync(ct);
-            _log.LogInformation("Updated device {DeviceId}", deviceId);
         }
 
         public async Task<(List<Device> Devices, int TotalCount)> GetAllDevicesAsync(int pageNumber, int pageSize, string? searchTerm, CancellationToken ct = default)
@@ -593,17 +560,26 @@ namespace MyApp.Infrastructure.Services
                 Endian = dto.Protocol == DeviceProtocol.Modbus ? dto.Endian : null
             };
 
+            // Add configuration
             await _db.DeviceConfigurations.AddAsync(cfg, ct);
+
+            // Update device config reference
             device.DeviceConfigurationId = cfg.ConfigurationId;
+
+            // Update protocol and ensure EF tracks it
+            device.Protocol = dto.Protocol;
+            _db.Entry(device).Property(d => d.Protocol).IsModified = true;
 
             await _db.SaveChangesAsync(ct);
 
             _log.LogInformation(
-                "Added configuration {CfgId} to device {DeviceId}",
+                "Added configuration {CfgId} to device {DeviceId} and updated protocol to {Protocol}",
                 cfg.ConfigurationId,
-                deviceId);
+                deviceId,
+                dto.Protocol);
 
             return cfg.ConfigurationId;
+
         }
 
 
@@ -949,9 +925,9 @@ namespace MyApp.Infrastructure.Services
                         throw new ArgumentException("Device name is required.");
 
                     // ONLY ADDITION: protocol validation
-                    if (string.IsNullOrWhiteSpace(dto.Protocol) ||
-                        (dto.Protocol != "Modbus" && dto.Protocol != "OPCUA"))
-                        throw new ArgumentException("Protocol must be either Modbus or OPCUA.");
+                    if (!Enum.IsDefined(typeof(DeviceProtocol), dto.Protocol))
+                        throw new ArgumentException("Invalid device protocol.");
+
 
                     var exists = await _db.Devices.AsNoTracking().AnyAsync(
                         d => !d.IsDeleted && d.Name.ToLower() == name.ToLower(), ct);
@@ -1070,13 +1046,16 @@ namespace MyApp.Infrastructure.Services
 
 
 
-        public async Task<List<DeviceConfigurationResponseDto>> GetDeviceConfigurationsByGatewayAsync(string gatewayId, CancellationToken ct = default)
+        public async Task<List<DeviceConfigurationResponseDto>> GetDeviceConfigurationsByGatewayAsync(
+        string gatewayId,
+        CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(gatewayId))
-                throw new ArgumentException("GatewayId cannot be empty.",
-                                            nameof(gatewayId));
+                throw new ArgumentException(
+                    "GatewayId cannot be empty.",
+                    nameof(gatewayId));
 
-            // STEP 1: Get devices that belong to this gateway
+            // STEP 1: Get devices for this gateway
             var gatewayDeviceIds =
                 await _db.Devices.AsNoTracking()
                     .Where(d => d.GatewayId == gatewayId && !d.IsDeleted)
@@ -1087,7 +1066,7 @@ namespace MyApp.Infrastructure.Services
                 throw new KeyNotFoundException(
                     $"No gateway found with GatewayId '{gatewayId}'.");
 
-            // STEP 2: Get mappings ONLY for those devices
+            // STEP 2: Get mapping info
             var mappings =
                 await _assetDb.MappingTable.AsNoTracking()
                     .Where(m => gatewayDeviceIds.Contains(m.DeviceId))
@@ -1097,119 +1076,121 @@ namespace MyApp.Infrastructure.Services
             if (!mappings.Any())
                 return new List<DeviceConfigurationResponseDto>();
 
-            // STEP 3: Extract mapped device IDs
             var mappedDeviceIds =
                 mappings.Select(m => m.DeviceId).Distinct().ToList();
 
-            // STEP 4: Load devices + configuration + slaves + registers
+            // STEP 3: Load devices + configuration + slaves + registers
             var devices =
                 await _db.Devices.AsNoTracking()
                     .Where(d => mappedDeviceIds.Contains(d.DeviceId) && !d.IsDeleted)
                     .Include(d => d.DeviceConfiguration)
                     .Include(d => d.DeviceSlave)
-                    .ThenInclude(s => s.Registers)
+                        .ThenInclude(s => s.Registers)
                     .ToListAsync(ct);
 
             if (!devices.Any())
                 return new List<DeviceConfigurationResponseDto>();
 
-            // STEP 5: Build lookup for mapped registers per device
+            // STEP 4: Build lookup for mapped registers
             var mappedRegistersByDevice =
                 mappings.GroupBy(m => m.DeviceId)
-                    .ToDictionary(g => g.Key,
-                                  g => g.Select(x => x.RegisterId).ToHashSet());
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(x => x.RegisterId).ToHashSet());
 
-            // STEP 6: Build response
+            // STEP 5: Build response
             var result =
-                devices
-                    .Select(device =>
+                devices.Select(device =>
+                {
+                    var cfg = device.DeviceConfiguration;
+
+                    return new DeviceConfigurationResponseDto
                     {
-                        var cfg = device.DeviceConfiguration;
+                        DeviceId = device.DeviceId,
+                        Name = device.Name,
+                        Protocol = device.Protocol, // device-level protocol (kept)
 
-                        return new DeviceConfigurationResponseDto
-                        {
-                            DeviceId = device.DeviceId,
-                            Name = device.Name,
-                            Protocol = cfg?.Protocol.ToString() ?? string.Empty,
-
-                            // Polling interval:
-                            // - Modbus: always
-                            // - OPC UA: only when polling mode
-                            PollIntervalMs =
-                                cfg?.Protocol == DeviceProtocol.Modbus
-                                    ? cfg.PollIntervalMs ?? 1000
-                                    : cfg?.ConnectionMode == OpcUaConnectionMode.Polling
-                                        ? cfg.PollIntervalMs ?? 0
-                                        : 0,
-
-                            // MODBUS ONLY
-                            IpAddress =
-                                cfg?.Protocol == DeviceProtocol.Modbus
-                                    ? cfg.IpAddress ?? "127.0.0.1"
+                        // ---------- Polling ----------
+                        PollIntervalMs =
+                            cfg == null ? null :
+                            cfg.Protocol == DeviceProtocol.Modbus
+                                ? cfg.PollIntervalMs ?? 1000
+                                : cfg.ConnectionMode == OpcUaConnectionMode.Polling
+                                    ? cfg.PollIntervalMs
                                     : null,
 
-                            Port =
-                                cfg?.Protocol == DeviceProtocol.Modbus
-                                    ? cfg.Port ?? 502
-                                    : null,
+                        // ---------- MODBUS ONLY ----------
+                        IpAddress =
+                            cfg?.Protocol == DeviceProtocol.Modbus
+                                ? cfg.IpAddress
+                                : null,
 
-                            SlaveId =
-                                cfg?.Protocol == DeviceProtocol.Modbus
-                                    ? (byte)(cfg.SlaveId ?? 1)
-                                    : (byte)0,
+                        Port =
+                            cfg?.Protocol == DeviceProtocol.Modbus
+                                ? cfg.Port
+                                : null,
 
-                            Endian =
-                                cfg?.Protocol == DeviceProtocol.Modbus
-                                    ? cfg.Endian ?? "Little"
-                                    : null,
+                        SlaveId =
+                            cfg?.Protocol == DeviceProtocol.Modbus && cfg.SlaveId.HasValue
+                                ? (byte)cfg.SlaveId.Value
+                                : (byte?)null,
 
-                            // OPC UA (you may add to DTO if not already)
-                            ConnectionString = cfg?.Protocol == DeviceProtocol.OpcUa
-                               ? cfg.ConnectionString
-                              : null,
+                        Endian =
+                            cfg?.Protocol == DeviceProtocol.Modbus
+                                ? cfg.Endian
+                                : null,
 
-                            ConnectionMode = cfg?.Protocol == DeviceProtocol.OpcUa
-                             ? cfg.ConnectionMode
-                            : null,
+                        // ---------- OPC UA ----------
+                        ConnectionString =
+                            cfg?.Protocol == DeviceProtocol.OpcUa
+                                ? cfg.ConnectionString
+                                : null,
 
-                            Slaves =
-                                device.DeviceSlave.Where(s => s.IsHealthy)
-                                    .Select(s => new SlaveDto
-                                    {
-                                        DeviceSlaveId = s.deviceSlaveId,
-                                        SlaveIndex = s.slaveIndex,
-                                        IsHealthy = s.IsHealthy,
+                        ConnectionMode =
+                            cfg?.Protocol == DeviceProtocol.OpcUa
+                                ? cfg.ConnectionMode
+                                : null,
 
-                                        Registers =
-                                            s.Registers
-                                                .Where(r =>
-                                                    r.IsHealthy &&
-                                                    mappedRegistersByDevice.TryGetValue(
-                                                        device.DeviceId,
-                                                        out var registerIds) &&
-                                                    registerIds.Contains(r.RegisterId))
-                                                .OrderBy(r => r.RegisterAddress)
-                                                .Select(r => new DeviceRegisterDto
-                                                {
-                                                    RegisterId = r.RegisterId,
-                                                    RegisterAddress = r.RegisterAddress,
-                                                    RegisterLength = r.RegisterLength,
-                                                    DataType = r.DataType,
-                                                    Scale = r.Scale,
-                                                    Unit = r.Unit,
-                                                    ByteOrder = r.ByteOrder,
-                                                    WordSwap = r.WordSwap,
-                                                    IsHealthy = r.IsHealthy
-                                                })
-                                                .ToList()
-                                    })
-                                    .ToList()
-                        };
-                    })
-                    .ToList();
+                        Slaves =
+                            device.DeviceSlave
+                                .Where(s => s.IsHealthy)
+                                .Select(s => new SlaveDto
+                                {
+                                    DeviceSlaveId = s.deviceSlaveId,
+                                    SlaveIndex = s.slaveIndex,
+                                    IsHealthy = s.IsHealthy,
 
+                                    Registers =
+                                        s.Registers
+                                            .Where(r =>
+                                                r.IsHealthy &&
+                                                mappedRegistersByDevice.TryGetValue(
+                                                    device.DeviceId,
+                                                    out var registerIds) &&
+                                                registerIds.Contains(r.RegisterId))
+                                            .OrderBy(r => r.RegisterAddress)
+                                            .Select(r => new DeviceRegisterDto
+                                            {
+                                                RegisterId = r.RegisterId,
+                                                RegisterAddress = r.RegisterAddress,
+                                                RegisterLength = r.RegisterLength,
+                                                DataType = r.DataType,
+                                                Scale = r.Scale,
+                                                Unit = r.Unit,
+                                                ByteOrder = r.ByteOrder,
+                                                WordSwap = r.WordSwap,
+                                                IsHealthy = r.IsHealthy
+                                            })
+                                            .ToList()
+                                })
+                                .ToList()
+                    };
+                })
+                .ToList();
 
             return result;
+
         }
     }
+
 }

@@ -4,6 +4,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using MyApp.Domain.Entities;
 
 namespace MyApp.Application.Dtos
 {
@@ -14,6 +15,9 @@ namespace MyApp.Application.Dtos
         [MinLength(1)]
         [MaxLength(20, ErrorMessage = "Cannot create more than 20 devices at once.")]
         public List<CreateDeviceDto> Devices { get; set; } = new();
+
+        public DeviceProtocol Protocol { get; set; }
+
     }
 
     public class BulkCreateDeviceResultDto

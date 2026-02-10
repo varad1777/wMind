@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using MyApp.Domain.Entities;
 
 namespace MyApp.Application.Dtos
 {
@@ -15,6 +16,7 @@ namespace MyApp.Application.Dtos
         /// Optional: change the Protocol (e.g. "ModbusTCP")
         /// </summary>
         [StringLength(100, ErrorMessage = "Protocol cannot exceed 100 characters.")]
-        public string? Protocol { get; set; }
+        public DeviceProtocol? Protocol { get; set; }
+
     }
 }

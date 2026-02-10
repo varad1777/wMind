@@ -18,6 +18,8 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Net;
+
 
 namespace MyApp.Infrastructure.Services
 {
@@ -84,10 +86,11 @@ namespace MyApp.Infrastructure.Services
 
                         // load current device ids
                         var deviceIds = await db.Devices
-                            .AsNoTracking()
-                            .Where(d => !d.IsDeleted)
-                            .Select(d => d.DeviceId)
-                            .ToListAsync(stoppingToken);
+                                          .AsNoTracking()
+                                          .Where(d => !d.IsDeleted && d.Protocol == DeviceProtocol.Modbus)
+                                          .Select(d => d.DeviceId)
+                                          .ToListAsync(stoppingToken);
+
 
                         // start a long-running loop task for each device if not already running
                         foreach (var id in deviceIds)
@@ -204,13 +207,24 @@ namespace MyApp.Infrastructure.Services
             }
 
             var cfg = device.DeviceConfiguration!;
+            var pollIntervalMs = cfg.PollIntervalMs ?? 1000;
             // _log.LogInformation("Polling device {DeviceId} using config {CfgId}", device.DeviceId, cfg.ConfigurationId);
+            if (cfg.Protocol != DeviceProtocol.Modbus)
+            {
+                _log.LogWarning(
+                    "Device {DeviceId} has non-Modbus configuration attached to Modbus poller",
+                    device.DeviceId);
+
+                return pollIntervalMs;
+            }
+
 
             var ip = cfg.IpAddress;
-            var port = cfg.Port > 0 ? cfg.Port : 502;
-            var slaveIdFromConfig = cfg.SlaveId > 0 ? cfg.SlaveId : 1;
+            int port = cfg.Port ?? 502;
+            int slaveIdFromConfig = cfg.SlaveId ?? 1;
+
             var endian = cfg.Endian ?? "Big";
-            var pollIntervalMs = cfg.PollIntervalMs > 0 ? cfg.PollIntervalMs : 1000;
+
 
             var addressStyleCfg = "ZeroBased";
 
@@ -290,7 +304,14 @@ namespace MyApp.Infrastructure.Services
                 // Link tokens so cancelling the overall loop cancels connect
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, connectCts.Token);
 
-                await tcp.ConnectAsync(ip, port, linked.Token);
+                if (!IPAddress.TryParse(ip, out var ipAddress))
+                {
+                    _log.LogWarning("Invalid IP address {Ip} for device {Device}", ip, device.DeviceId);
+                    return pollIntervalMs;
+                }
+
+                await tcp.ConnectAsync(ipAddress, port, linked.Token);
+
 
                 // Using in-repo ModbusTcpClient helper to avoid NModbus4 dependency
 
@@ -614,7 +635,7 @@ namespace MyApp.Infrastructure.Services
 
 
             // Return the poll interval (ms) for next loop delay
-            return pollIntervalMs;
+            return pollIntervalMs ;
         }
 
         private static string? TryGetString(JsonDocument doc, string propName)
