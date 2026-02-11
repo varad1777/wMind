@@ -37,9 +37,10 @@ interface ProtocolSettings {
 
 interface FormData {
   configName: string;
-  pollInterval: number;
+  pollInterval: number | undefined;
   protocolSettings: ProtocolSettings;
 }
+
 const DEVICE_PROTOCOL_LABEL: Record<DeviceProtocol, string> = {
   [DeviceProtocol.Modbus]: "Modbus",
   [DeviceProtocol.OpcUa]: "OPC UA",
@@ -60,65 +61,106 @@ export default function EditDeviceForm() {
     protocol: DeviceProtocol.Modbus,
   });
 
+  // Initialize with empty state - will be populated from API
   const [formData, setFormData] = useState<FormData>({
     configName: "",
-    pollInterval: 1000,
-    protocolSettings: {
-      ipAddress: "127.0.0.1",
-      port: 502,
-      slaveId: 1,
-      endian: "Little",
-      connectionMode: 1, // Default to Polling
-    },
+    pollInterval: undefined,
+    protocolSettings: {},
   });
 
   const [loading, setLoading] = useState(false);
+  const [isLoadingDevice, setIsLoadingDevice] = useState(true);
 
   /* -------------------- FETCH DEVICE -------------------- */
- useEffect(() => {
-  if (!deviceId) return;
+  useEffect(() => {
+    if (!deviceId) return;
 
-  const fetchDevice = async () => {
-    try {
-      const res = await getDeviceById(deviceId);
+    const fetchDevice = async () => {
+      setIsLoadingDevice(true);
+      try {
+        const res = await getDeviceById(deviceId);
 
-      console.log("Fetched device:", res); // Debug: see what API returns
+        console.log("Fetched device:", res);
+        console.log("Device protocol:", res.protocol);
+        console.log("Configuration:", res.deviceConfiguration);
 
-      setDeviceDetails({
-        name: res.name,
-        description: res.description ?? "",
-        protocol: res.protocol,
-      });
+        const config = res.deviceConfiguration;
 
-      const config = res.deviceConfiguration;
+        // ⚠️ CRITICAL FIX: Use configuration protocol if it exists, otherwise use device protocol
+        const actualProtocol = config?.protocol ?? res.protocol;
 
-      // Only populate form if configuration exists
-      if (config) {
-        console.log("Configuration from DB:", config); // Debug
-        
-        setFormData({
-          configName: config.name || `${res.name}_config`,
-          pollInterval: config.pollIntervalMs || 1000,
-          protocolSettings: {
-            // Use explicit checks for numeric values that can be 0
-            ipAddress: config.ipAddress || "127.0.0.1",
-            port: config.port || 502,
-            slaveId: config.slaveId !== undefined ? config.slaveId : 1,
-            endian: config.endian || "Little",
-            connectionString: config.connectionString || "",
-            connectionMode: config.connectionMode !== undefined ? config.connectionMode : 1,
-          },
+        console.log("Using protocol:", actualProtocol, 
+          actualProtocol === DeviceProtocol.Modbus ? "(Modbus)" : "(OPC UA)");
+
+        setDeviceDetails({
+          name: res.name,
+          description: res.description ?? "",
+          protocol: actualProtocol, // Use the actual protocol from config
         });
-      }
-    } catch (err: any) {
-      console.error("Error fetching device:", err);
-      toast.error("Failed to load device details");
-      navigate("/devices");
-    }
-  };
 
-  fetchDevice();
-}, [deviceId, navigate]);
+        // Only populate form if configuration exists
+        if (config) {
+          console.log("Configuration from DB:", config);
+
+          const isModbus = actualProtocol === DeviceProtocol.Modbus;
+          const isOpcUa = actualProtocol === DeviceProtocol.OpcUa;
+
+          setFormData({
+            configName: config.name || `${res.name}_config`,
+            pollInterval: config.pollIntervalMs ?? undefined,
+            protocolSettings: {
+              // Modbus-specific fields
+              ...(isModbus && {
+                ipAddress: config.ipAddress || "127.0.0.1",
+                port: config.port ?? 502,
+                slaveId: config.slaveId !== undefined ? config.slaveId : 1,
+                endian: config.endian || "Little",
+              }),
+              // OPC UA-specific fields
+              ...(isOpcUa && {
+                connectionString: config.connectionString || "",
+                connectionMode:
+                  config.connectionMode !== undefined
+                    ? config.connectionMode
+                    : 1,
+              }),
+            },
+          });
+        } else {
+          // No configuration exists, set protocol-specific defaults
+          const isModbus = actualProtocol === DeviceProtocol.Modbus;
+          const isOpcUa = actualProtocol === DeviceProtocol.OpcUa;
+
+          setFormData({
+            configName: `${res.name}_config`,
+            pollInterval: isModbus ? 1000 : undefined,
+            protocolSettings: {
+              // Modbus defaults
+              ...(isModbus && {
+                ipAddress: "127.0.0.1",
+                port: 502,
+                slaveId: 1,
+                endian: "Little" as EndianType,
+              }),
+              // OPC UA defaults
+              ...(isOpcUa && {
+                connectionString: "",
+                connectionMode: 1 as OpcUaConnectionModeType,
+              }),
+            },
+          });
+        }
+      } catch (err: any) {
+        console.error("Error fetching device:", err);
+        toast.error("Failed to load device details");
+        navigate("/devices");
+      } finally {
+        setIsLoadingDevice(false);
+      }
+    };
+
+    fetchDevice();
+  }, [deviceId, navigate]);
 
   /* -------------------- VALIDATION -------------------- */
   const validateForm = () => {
@@ -147,7 +189,11 @@ export default function EditDeviceForm() {
         protocolSettings.connectionMode === 1); // Polling
 
     if (isPollIntervalRequired) {
-      if (pollInterval < 100 || pollInterval > 300000) {
+      if (
+        pollInterval === undefined ||
+        pollInterval < 100 ||
+        pollInterval > 300000
+      ) {
         toast.error("Poll interval must be between 100-300000 ms");
         return false;
       }
@@ -206,7 +252,7 @@ export default function EditDeviceForm() {
   };
 
   const handleProtocolSettingsChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
+    e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const { name, value } = e.target;
 
@@ -230,12 +276,16 @@ export default function EditDeviceForm() {
   };
 
   const handleConnectionModeChange = (value: string) => {
+    const newMode = value === "Polling" ? 1 : 2;
+    
     setFormData((prev) => ({
       ...prev,
       protocolSettings: {
         ...prev.protocolSettings,
-        connectionMode: value === "Polling" ? 1 : 2, // Convert to numeric
+        connectionMode: newMode as OpcUaConnectionModeType,
       },
+      // Set default poll interval when switching to Polling mode
+      pollInterval: newMode === 1 && prev.pollInterval === undefined ? 1000 : prev.pollInterval,
     }));
   };
 
@@ -282,6 +332,8 @@ export default function EditDeviceForm() {
         }),
       };
 
+      console.log("Submitting update:", { dto, configDto });
+
       await updateDevice(deviceId, dto, configDto);
 
       toast.success("Device updated successfully!");
@@ -292,6 +344,22 @@ export default function EditDeviceForm() {
       setLoading(false);
     }
   };
+
+  /* -------------------- LOADING STATE -------------------- */
+  if (isLoadingDevice) {
+    return (
+      <div className="flex justify-center items-center min-h-[85vh] bg-gradient-to-b from-background to-muted/30">
+        <Card className="w-full max-w-2xl shadow-lg border border-border/60 bg-card/90 backdrop-blur-sm">
+          <CardContent className="pt-6">
+            <div className="flex flex-col items-center justify-center py-12">
+              <Settings2 className="h-12 w-12 text-primary animate-pulse mb-4" />
+              <p className="text-muted-foreground">Loading device details...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   /* -------------------- JSX -------------------- */
   return (
@@ -396,7 +464,7 @@ export default function EditDeviceForm() {
                     <Input
                       name="pollInterval"
                       type="number"
-                      value={formData.pollInterval}
+                      value={formData.pollInterval ?? ""}
                       onChange={handleConfigChange}
                     />
                   </div>
@@ -409,7 +477,7 @@ export default function EditDeviceForm() {
                       <Label>IP Address</Label>
                       <Input
                         name="ipAddress"
-                        value={formData.protocolSettings.ipAddress}
+                        value={formData.protocolSettings.ipAddress ?? ""}
                         onChange={handleProtocolSettingsChange}
                       />
                     </div>
@@ -419,7 +487,7 @@ export default function EditDeviceForm() {
                       <Input
                         name="port"
                         type="number"
-                        value={formData.protocolSettings.port}
+                        value={formData.protocolSettings.port ?? ""}
                         onChange={handleProtocolSettingsChange}
                       />
                     </div>
@@ -429,7 +497,7 @@ export default function EditDeviceForm() {
                       <Input
                         name="slaveId"
                         type="number"
-                        value={formData.protocolSettings.slaveId}
+                        value={formData.protocolSettings.slaveId ?? ""}
                         onChange={handleProtocolSettingsChange}
                       />
                     </div>
@@ -437,7 +505,7 @@ export default function EditDeviceForm() {
                     <div className="grid gap-2">
                       <Label>Endian</Label>
                       <Select
-                        value={formData.protocolSettings.endian}
+                        value={formData.protocolSettings.endian ?? "Little"}
                         onValueChange={handleEndianChange}
                       >
                         <SelectTrigger>
@@ -458,7 +526,7 @@ export default function EditDeviceForm() {
                     <Label>Connection String</Label>
                     <Input
                       name="connectionString"
-                      value={formData.protocolSettings.connectionString}
+                      value={formData.protocolSettings.connectionString ?? ""}
                       onChange={handleProtocolSettingsChange}
                     />
                   </div>

@@ -176,9 +176,12 @@ namespace MyApp.Infrastructure.Services
         }
 
 
-        public async Task UpdateDeviceAsync(Guid deviceId, UpdateDeviceDto dto, DeviceConfigurationDto? configDto = null, CancellationToken ct = default)
+        public async Task UpdateDeviceAsync(Guid deviceId, UpdateDeviceDto dto,DeviceConfigurationDto? configDto = null, CancellationToken ct = default)
         {
-            var device = await _db.Devices.FindAsync(new object[] { deviceId }, ct);
+            //    FIX: Use FirstOrDefaultAsync instead of FindAsync
+            var device = await _db.Devices
+                .FirstOrDefaultAsync(d => d.DeviceId == deviceId, ct);
+
             if (device == null)
                 throw new KeyNotFoundException("Device not found");
 
@@ -239,11 +242,11 @@ namespace MyApp.Infrastructure.Services
                 device.Protocol = dto.Protocol.Value;
             }
 
-
             // ---------------- Configuration ----------------
             if (configDto != null)
             {
-                // ... existing validation code ...
+                //    CRITICAL FIX: Sync device protocol with configuration protocol
+                device.Protocol = configDto.Protocol;
 
                 // Helper to apply protocol-aware fields
                 void ApplyConfig(DeviceConfiguration cfg)
@@ -251,27 +254,33 @@ namespace MyApp.Infrastructure.Services
                     cfg.Name = configDto.Name.Trim();
                     cfg.Protocol = configDto.Protocol;
 
+                    // Clear all protocol-specific fields first
+                    cfg.ConnectionString = null;
+                    cfg.ConnectionMode = null;
+                    cfg.PollIntervalMs = null;
+                    cfg.IpAddress = null;
+                    cfg.Port = null;
+                    cfg.SlaveId = null;
+                    cfg.Endian = null;
+
                     // OPC UA
-                    cfg.ConnectionString = configDto.Protocol == DeviceProtocol.OpcUa
-                        ? configDto.ConnectionString
-                        : null;
-
-                    cfg.ConnectionMode = configDto.Protocol == DeviceProtocol.OpcUa
-                        ? configDto.ConnectionMode
-                        : null;
-
-                    // Polling
-                    cfg.PollIntervalMs = configDto.Protocol == DeviceProtocol.Modbus
-                        ? configDto.PollIntervalMs ?? 1000
-                        : configDto.ConnectionMode == OpcUaConnectionMode.Polling
+                    if (configDto.Protocol == DeviceProtocol.OpcUa)
+                    {
+                        cfg.ConnectionString = configDto.ConnectionString;
+                        cfg.ConnectionMode = configDto.ConnectionMode;
+                        cfg.PollIntervalMs = configDto.ConnectionMode == OpcUaConnectionMode.Polling
                             ? configDto.PollIntervalMs
                             : null;
-
+                    }
                     // MODBUS
-                    cfg.IpAddress = configDto.Protocol == DeviceProtocol.Modbus ? configDto.IpAddress : null;
-                    cfg.Port = configDto.Protocol == DeviceProtocol.Modbus ? configDto.Port : null;
-                    cfg.SlaveId = configDto.Protocol == DeviceProtocol.Modbus ? configDto.SlaveId : null;
-                    cfg.Endian = configDto.Protocol == DeviceProtocol.Modbus ? configDto.Endian : null;
+                    else if (configDto.Protocol == DeviceProtocol.Modbus)
+                    {
+                        cfg.IpAddress = configDto.IpAddress;
+                        cfg.Port = configDto.Port;
+                        cfg.SlaveId = configDto.SlaveId;
+                        cfg.Endian = configDto.Endian;
+                        cfg.PollIntervalMs = configDto.PollIntervalMs ?? 1000;
+                    }
                 }
 
                 DeviceConfiguration targetCfg;
@@ -283,34 +292,49 @@ namespace MyApp.Infrastructure.Services
 
                     if (!otherUses)
                     {
-                        targetCfg = await _db.DeviceConfigurations.FindAsync(cfgId);
+                        //    FIX: Use FirstOrDefaultAsync for tracking
+                        targetCfg = await _db.DeviceConfigurations
+                            .FirstOrDefaultAsync(c => c.ConfigurationId == cfgId, ct);
+
                         if (targetCfg == null)
                         {
                             targetCfg = new DeviceConfiguration { ConfigurationId = Guid.NewGuid() };
                             await _db.DeviceConfigurations.AddAsync(targetCfg, ct);
+                            device.DeviceConfigurationId = targetCfg.ConfigurationId;
+                        }
+                        else
+                        {
+                            // Mark as modified
+                            _db.Entry(targetCfg).State = EntityState.Modified;
                         }
                     }
                     else
                     {
+                        // Create new configuration if shared by other devices
                         targetCfg = new DeviceConfiguration { ConfigurationId = Guid.NewGuid() };
                         await _db.DeviceConfigurations.AddAsync(targetCfg, ct);
+                        device.DeviceConfigurationId = targetCfg.ConfigurationId;
                     }
                 }
                 else
                 {
                     targetCfg = new DeviceConfiguration { ConfigurationId = Guid.NewGuid() };
                     await _db.DeviceConfigurations.AddAsync(targetCfg, ct);
+                    device.DeviceConfigurationId = targetCfg.ConfigurationId;
                 }
 
                 ApplyConfig(targetCfg);
-                device.DeviceConfigurationId = targetCfg.ConfigurationId;
 
-               
                 _log.LogInformation(
                     "Attached/updated configuration {CfgId} and set device {DeviceId} protocol to {Protocol}",
                     targetCfg.ConfigurationId, deviceId, configDto.Protocol);
             }
 
+            //    CRITICAL FIX: Mark device as modified
+            _db.Entry(device).State = EntityState.Modified;
+
+            // Save all changes
+            await _db.SaveChangesAsync(ct);
         }
 
         public async Task<(List<Device> Devices, int TotalCount)> GetAllDevicesAsync(int pageNumber, int pageSize, string? searchTerm, CancellationToken ct = default)
@@ -480,15 +504,15 @@ namespace MyApp.Infrastructure.Services
                 deviceId);
         }
 
-        public async Task<Guid> AddConfigurationAsync(
-            Guid deviceId,
-            DeviceConfigurationDto dto,
-            CancellationToken ct = default)
+        public async Task<Guid> AddConfigurationAsync(Guid deviceId,DeviceConfigurationDto dto,CancellationToken ct = default)
         {
             if (dto == null)
                 throw new ArgumentNullException(nameof(dto));
 
-            var device = await _db.Devices.FindAsync(new object[] { deviceId }, ct);
+            //   FIX: Use FirstOrDefaultAsync instead of FindAsync for better tracking
+            var device = await _db.Devices
+                .FirstOrDefaultAsync(d => d.DeviceId == deviceId, ct);
+
             if (device == null)
                 throw new KeyNotFoundException("Device not found");
 
@@ -560,16 +584,17 @@ namespace MyApp.Infrastructure.Services
                 Endian = dto.Protocol == DeviceProtocol.Modbus ? dto.Endian : null
             };
 
-            // Add configuration
+            // Add configuration first
             await _db.DeviceConfigurations.AddAsync(cfg, ct);
 
-            // Update device config reference
+            //   FIX: Update protocol FIRST, then the configuration ID
+            device.Protocol = dto.Protocol;
             device.DeviceConfigurationId = cfg.ConfigurationId;
 
-            // Update protocol and ensure EF tracks it
-            device.Protocol = dto.Protocol;
-            _db.Entry(device).Property(d => d.Protocol).IsModified = true;
+            //   FIX: Explicitly mark the entire entity as modified
+            _db.Entry(device).State = EntityState.Modified;
 
+            // Save all changes
             await _db.SaveChangesAsync(ct);
 
             _log.LogInformation(
@@ -579,7 +604,6 @@ namespace MyApp.Infrastructure.Services
                 dto.Protocol);
 
             return cfg.ConfigurationId;
-
         }
 
 

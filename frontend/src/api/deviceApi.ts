@@ -80,6 +80,8 @@ export interface Device {
   deviceConfigurationId?: string;
   isDeleted: boolean;
   createdAt: string;
+  items ?: any[]; // For matched devices, can contain matched items
+  totalPages?: number; // For paginated responses
 }
 /* ============================
    API FUNCTIONS

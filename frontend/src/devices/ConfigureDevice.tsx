@@ -88,24 +88,36 @@ export default function ConfigureDevice() {
       try {
         const res = await getDeviceById(deviceId);
 
+        console.log("Fetched device:", res);
+        console.log("Device protocol:", res.protocol);
+        console.log("Configuration:", res.deviceConfiguration);
+
+        const config = res.deviceConfiguration;
+
+        // ⚠️ CRITICAL FIX: Use configuration protocol if it exists, otherwise use device protocol
+        const actualProtocol = config?.protocol ?? res.protocol;
+
+        console.log("Using protocol:", actualProtocol, 
+          actualProtocol === DeviceProtocol.Modbus ? "(Modbus)" : "(OPC UA)");
+
         setDeviceDetails({
           name: res.name ?? "",
           description: res.description ?? "",
           gatewayClientId: res.gatewayId ?? "",
-          protocol: res.protocol,
+          protocol: actualProtocol, // Use the actual protocol from config
         });
 
         setFormData({
-          configName: res.deviceConfiguration?.name ?? `${res.name}_config`,
-          pollInterval: res.deviceConfiguration?.pollIntervalMs ?? 1000,
+          configName: config?.name ?? `${res.name}_config`,
+          pollInterval: config?.pollIntervalMs ?? 1000,
 
-          ipAddress: res.deviceConfiguration?.ipAddress ?? "127.0.0.1",
-          port: res.deviceConfiguration?.port ?? 502,
-          slaveId: res.deviceConfiguration?.slaveId ?? 1,
-          endian: res.deviceConfiguration?.endian ?? "Little",
+          ipAddress: config?.ipAddress ?? "127.0.0.1",
+          port: config?.port ?? 502,
+          slaveId: config?.slaveId ?? 1,
+          endian: config?.endian ?? "Little",
 
-          connectionString: res.deviceConfiguration?.connectionString ?? "",
-          connectionMode: res.deviceConfiguration?.connectionMode ?? 1, // Default to Polling
+          connectionString: config?.connectionString ?? "",
+          connectionMode: config?.connectionMode ?? 1, // Default to Polling
         });
       } catch {
         toast.error("Failed to load device");
