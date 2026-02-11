@@ -56,36 +56,34 @@ namespace Infrastructure.Service
 
         }
 
-        public async Task WriteTelemetryAsync(InfluxTelementryDto dto)
-        {
-            try
-            {
-                var point = PointData
-                    .Measurement("signals")
-                    .Tag("assetId", dto.AssetId.ToString())
-                    .Tag("signalTypeId", dto.SignalTypeId.ToString())
-                    .Tag("deviceId", dto.DeviceId.ToString())
-                    .Tag("devicePortId", dto.deviceSlaveId.ToString())
-                    .Tag("mappingId", dto.MappingId.ToString())
-                    .Tag("RegisterAdress", dto.RegisterAddress.ToString())
-                    .Tag("SignalName", dto.SignalType.ToString())
-                    .Field("value", dto.Value)
-                    .Field("unit", dto.Unit)
-                    .Timestamp(dto.Timestamp, WritePrecision.Ns);
+      public async Task WriteTelemetryAsync(InfluxTelementryDto dto)
+{
+    try
+    {
+        var point = PointData
+            .Measurement("signals")
+            .Tag("signalId", dto.SignalId.ToString())   // ✅ primary identifier
+            .Tag("assetId", dto.AssetId.ToString())
+            .Tag("signalTypeId", dto.SignalTypeId.ToString())
+            .Tag("deviceId", dto.DeviceId.ToString())
+            .Tag("SignalName", dto.SignalType)          // no ToString() if already string
+            .Field("value", dto.Value)
+            .Field("unit", dto.Unit)
+            .Timestamp(dto.Timestamp, WritePrecision.Ns);
 
-                var writeApi = _client.GetWriteApiAsync();
-                await writeApi.WritePointAsync(point, _bucket, _org);
+        var writeApi = _client.GetWriteApiAsync();
+        await writeApi.WritePointAsync(point, _bucket, _org);
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex,
+            "Failed to write telemetry to InfluxDB | SignalId:{SignalId} | Asset:{AssetId}",
+            dto.SignalId, dto.AssetId);
 
-                //Log.Information("Telemetry written successfully | Asset:{AssetId} | Signal:{SignalTypeId} | Value:{Value}",
-                //    dto.AssetId, dto.SignalTypeId, dto.Value);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Failed to write telemetry to InfluxDB | Asset:{AssetId} | Signal:{SignalTypeId}",
-                    dto.AssetId, dto.SignalTypeId);
-                throw;
-            }
-        }
+        throw;
+    }
+}
+
 
 
         public async Task<TelemetryResponseDto> GetTelemetrySeriesAsync(TelemetryRequestDto request)

@@ -8,25 +8,24 @@ using System.Threading.Tasks;
 namespace Application.DTOs
 {
     public class InfluxTelementryDto
-    {
-        public Guid AssetId { get; set; }           // Asset ID for grouping in InfluxDB
-
-        // Device info
-        public Guid DeviceId { get; set; }          // Device ID from backend
-        public Guid deviceSlaveId { get; set; }     // Device port / slave ID
-        public int slaveIndex { get; set; }         // Optional if needed
-        public int RegisterAddress { get; set; }    // Register address from device
-
-        // Signal info
-        public Guid SignalTypeId { get; set; }      // Mapped SignalType ID
-        public string SignalType { get; set; }      // e.g., Temperature, Pressure
-        public string Unit { get; set; }            // e.g., "Celsius", "Bar"
-
-        // Measurement
-        public float Value { get; set; }           // Actual telemetry value
-        public DateTime Timestamp { get; set; }     // Timestamp from device / queue
-
-        // Optional mapping ID if needed for unique identification
-        public Guid MappingId { get; set; }
-    }
+{
+    // NEW: Primary identifier
+    public Guid SignalId { get; set; }
+    
+    // Keep these for backwards compatibility and enrichment
+    public Guid AssetId { get; set; }
+    public Guid DeviceId { get; set; }
+    public Guid SignalTypeId { get; set; }
+    
+    // Signal details
+    public string SignalType { get; set; }
+    public double Value { get; set; }
+    public string Unit { get; set; }
+    public DateTime Timestamp { get; set; }
+    
+    // DEPRECATED - No longer needed with SignalId approach
+    // public Guid deviceSlaveId { get; set; }
+    // public Guid MappingId { get; set; }
+    // public int RegisterAddress { get; set; }
+}
 }

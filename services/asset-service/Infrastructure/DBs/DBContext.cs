@@ -7,7 +7,6 @@ namespace Infrastructure.DBs
 {
     public class DBContext : DbContext
     {
-        // ✅ Use generic DbContextOptions<DBContext>
         public DBContext(DbContextOptions<DBContext> options) : base(options) { }
 
         public DbSet<Asset> Assets { get; set; } = null!;
@@ -28,7 +27,6 @@ namespace Infrastructure.DBs
         {
             base.OnModelCreating(modelBuilder);
 
-            // Asset self relationship
             modelBuilder.Entity<Asset>()
                 .HasMany(a => a.Childrens)
                 .WithOne()
@@ -39,9 +37,8 @@ namespace Infrastructure.DBs
                 .HasIndex(a => a.Name)
                 .IsUnique();
 
-            // AssetConfiguration
             modelBuilder.Entity<AssetConfiguration>()
-                .HasKey(ac => ac.AssetConfigId); // primary key
+                .HasKey(ac => ac.AssetConfigId);
 
             modelBuilder.Entity<AssetConfiguration>()
                 .HasOne(a => a.Asset)
@@ -50,43 +47,32 @@ namespace Infrastructure.DBs
 
             modelBuilder.Entity<AssetConfiguration>()
                 .HasOne(ac => ac.SignalType)
-                .WithMany(st => st.AssetConfigurations) // navigation property in SignalType
+                .WithMany(st => st.AssetConfigurations) 
                 .HasForeignKey(ac => ac.SignaTypeID);
 
             modelBuilder.Entity<AssetConfiguration>()
                 .HasIndex(ac => new { ac.AssetId, ac.SignaTypeID })
                 .IsUnique();
 
-            // Mapping table indexes
             modelBuilder.Entity<AssetSignalDeviceMapping>(b =>
             {
                 b.HasKey(m => m.MappingId);
-                // index for fast lookup by device + port (deviceSlaveId)
                 b.HasIndex(m => new { m.DeviceId, m.DevicePortId }).HasDatabaseName("IX_Mapping_Device_Port");
-                // index for asset/signals if you query by them
                 b.HasIndex(m => new { m.AssetId, m.SignalTypeId }).HasDatabaseName("IX_Mapping_Asset_Signal");
             });
 
-            // SignalData configuration (time-series aggregated table)
             modelBuilder.Entity<SignalData>(b =>
             {
                 b.HasKey(sd => sd.SignalDataId);
 
-                // Unique business key for a bucket so upserts are deterministic:
-                // (AssetId, SignalTypeId, DeviceId, DevicePortId, BucketStartUtc)
                 b.HasIndex(e => new { e.AssetId, e.SignalTypeId, e.DeviceId, e.DevicePortId, e.BucketStartUtc })
                     .IsUnique()
                     .HasDatabaseName("UX_SignalData_BucketKey");
 
-                // Additional supporting indexes for query patterns
                 b.HasIndex(e => new { e.AssetId, e.BucketStartUtc }).HasDatabaseName("IX_SignalData_Asset_Bucket");
                 b.HasIndex(e => new { e.SignalTypeId, e.BucketStartUtc }).HasDatabaseName("IX_SignalData_SignalType_Bucket");
                 b.HasIndex(e => new { e.DeviceId, e.DevicePortId, e.BucketStartUtc }).HasDatabaseName("IX_SignalData_Device_Bucket");
-
-                // Optional: define AvgValue as computed column in the database via migration if you want.
-                // Example (SQL Server): ALTER TABLE ... ADD AvgValue AS (CASE WHEN Count>0 THEN Sum/Count ELSE NULL END) PERSISTED
-                // EF Core migration must be edited to include the appropriate SQL for computed column.
-            });
+ });
 
 
             modelBuilder.Entity<Notification>(b =>
@@ -111,15 +97,31 @@ namespace Infrastructure.DBs
             });
 
             modelBuilder.Entity<Alert>(b =>
-            {
-                b.HasKey(a => a.AlertId);
+{
+    b.HasKey(a => a.AlertId);
 
-                b.Property(a => a.AssetName).HasMaxLength(200).IsRequired();
-                b.Property(a => a.SignalName).HasMaxLength(200).IsRequired();
+    b.Property(a => a.AssetName)
+        .HasMaxLength(200)
+        .IsRequired();
 
-                b.HasIndex(a => new { a.AssetId, a.IsAnalyzed });
-                b.HasIndex(a => a.MappingId);
-            });
+    b.Property(a => a.SignalName)
+        .HasMaxLength(200)
+        .IsRequired();
+
+    // ✅ For analyzed filtering
+    b.HasIndex(a => new { a.AssetId, a.IsAnalyzed });
+
+    // ✅ LEGACY support
+    b.HasIndex(a => new { a.MappingId, a.IsActive });
+
+    // ✅ NEW (VERY IMPORTANT)
+    b.HasIndex(a => new { a.SignalId, a.IsActive })
+        .HasDatabaseName("IX_Alert_Signal_Active");
+
+    // Optional but recommended
+    b.HasIndex(a => a.AlertStartUtc);
+});
+
 
 
             modelBuilder.Entity<AlertAnalysis>(b =>
@@ -132,7 +134,7 @@ namespace Infrastructure.DBs
 
             modelBuilder.Entity<Signal>(b =>
 {
-    b.HasKey(s => s.SignalId); // Primary key
+    b.HasKey(s => s.SignalId); 
 
     b.Property(s => s.SignalKey)
         .HasMaxLength(500)
@@ -148,11 +150,17 @@ namespace Infrastructure.DBs
     b.Property(s => s.CreatedAt)
         .IsRequired();
 
-    // Optional: unique index on Asset + Device + SignalKey
     b.HasIndex(s => new { s.AssetId, s.DeviceId, s.SignalKey })
-     .IsUnique()
-     .HasDatabaseName("UX_Signal_AssetDeviceKey");
+        .IsUnique()
+        .HasDatabaseName("UX_Signal_AssetDeviceKey");
+
+    // ✅ ADD THIS RELATIONSHIP
+    b.HasOne(s => s.SignalType)
+        .WithMany()
+        .HasForeignKey(s => s.SignalTypeId)
+        .OnDelete(DeleteBehavior.Restrict);
 });
+
 
 
         }

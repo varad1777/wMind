@@ -89,16 +89,18 @@ namespace Infrastructure.Services
                     };
                     mappings.Add(mapping);
 
-                    var signal = new Signal
-                    {
-                        SignalId = Guid.NewGuid(),
-                        SignalKey = $"{dto.AssetId}.{dto.DeviceId}.{signalType.SignalName}",
-                        AssetId = dto.AssetId,
-                        DeviceId = dto.DeviceId,
-                        SignalName = signalType.SignalName,
-                        Unit = signalType.SignalUnit,
-                        CreatedAt = DateTime.UtcNow
-                    };
+            var signal = new Signal
+            {
+                SignalId = Guid.NewGuid(),
+                SignalKey = $"{dto.AssetId}.{dto.DeviceId}.{signalType.SignalName}",
+                AssetId = dto.AssetId,
+                DeviceId = dto.DeviceId,
+                SignalTypeId = signalType.SignalTypeID, 
+                SignalName = signalType.SignalName,
+                Unit = signalType.SignalUnit,
+                CreatedAt = DateTime.UtcNow
+            };
+
 
                     signals.Add(signal);
                 }

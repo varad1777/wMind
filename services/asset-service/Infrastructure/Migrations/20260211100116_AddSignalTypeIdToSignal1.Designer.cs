@@ -4,6 +4,7 @@ using Infrastructure.DBs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(DBContext))]
-    partial class DBContextModelSnapshot : ModelSnapshot
+    [Migration("20260211100116_AddSignalTypeIdToSignal1")]
+    partial class AddSignalTypeIdToSignal1
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -51,16 +54,16 @@ namespace Infrastructure.Migrations
                     b.Property<bool>("IsAnalyzed")
                         .HasColumnType("bit");
 
-                    b.Property<Guid?>("MappingId")
+                    b.Property<Guid>("MappingId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<double>("MaxObservedValue")
+                    b.Property<double?>("MaxObservedValue")
                         .HasColumnType("float");
 
                     b.Property<double>("MaxThreshold")
                         .HasColumnType("float");
 
-                    b.Property<double>("MinObservedValue")
+                    b.Property<double?>("MinObservedValue")
                         .HasColumnType("float");
 
                     b.Property<double>("MinThreshold")
@@ -68,9 +71,6 @@ namespace Infrastructure.Migrations
 
                     b.Property<int>("ReminderTimeHours")
                         .HasColumnType("int");
-
-                    b.Property<Guid>("SignalId")
-                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("SignalName")
                         .IsRequired()
@@ -85,14 +85,9 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("AlertId");
 
-                    b.HasIndex("AlertStartUtc");
+                    b.HasIndex("MappingId");
 
                     b.HasIndex("AssetId", "IsAnalyzed");
-
-                    b.HasIndex("MappingId", "IsActive");
-
-                    b.HasIndex("SignalId", "IsActive")
-                        .HasDatabaseName("IX_Alert_Signal_Active");
 
                     b.ToTable("Alerts");
                 });

@@ -13,5 +13,11 @@ namespace Domain.Entities
         public string Unit { get; set; }      
 
         public DateTime CreatedAt { get; set; }
+
+        public Guid SignalTypeId { get; set; }
+
+public SignalTypes SignalType { get; set; }
+
+
     }
 }
