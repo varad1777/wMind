@@ -4,6 +4,7 @@ using Infrastructure.DBs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(DBContext))]
-    partial class DBContextModelSnapshot : ModelSnapshot
+    [Migration("20260206073121_AddSignalTable")]
+    partial class AddSignalTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -51,16 +54,16 @@ namespace Infrastructure.Migrations
                     b.Property<bool>("IsAnalyzed")
                         .HasColumnType("bit");
 
-                    b.Property<Guid?>("MappingId")
+                    b.Property<Guid>("MappingId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<double>("MaxObservedValue")
+                    b.Property<double?>("MaxObservedValue")
                         .HasColumnType("float");
 
                     b.Property<double>("MaxThreshold")
                         .HasColumnType("float");
 
-                    b.Property<double>("MinObservedValue")
+                    b.Property<double?>("MinObservedValue")
                         .HasColumnType("float");
 
                     b.Property<double>("MinThreshold")
@@ -68,9 +71,6 @@ namespace Infrastructure.Migrations
 
                     b.Property<int>("ReminderTimeHours")
                         .HasColumnType("int");
-
-                    b.Property<Guid>("SignalId")
-                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("SignalName")
                         .IsRequired()
@@ -85,14 +85,9 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("AlertId");
 
-                    b.HasIndex("AlertStartUtc");
+                    b.HasIndex("MappingId");
 
                     b.HasIndex("AssetId", "IsAnalyzed");
-
-                    b.HasIndex("MappingId", "IsActive");
-
-                    b.HasIndex("SignalId", "IsActive")
-                        .HasDatabaseName("IX_Alert_Signal_Active");
 
                     b.ToTable("Alerts");
                 });
@@ -301,16 +296,13 @@ namespace Infrastructure.Migrations
 
                     b.Property<string>("SignalKey")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
 
                     b.Property<string>("SignalName")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<Guid>("SignalTypeId")
-                        .HasColumnType("uniqueidentifier");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("Unit")
                         .IsRequired()
@@ -319,11 +311,12 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("SignalId");
 
-                    b.HasIndex("SignalTypeId");
-
-                    b.HasIndex("AssetId", "DeviceId", "SignalKey")
+                    b.HasIndex("SignalKey")
                         .IsUnique()
-                        .HasDatabaseName("UX_Signal_AssetDeviceKey");
+                        .HasDatabaseName("UX_Signal_SignalKey");
+
+                    b.HasIndex("AssetId", "DeviceId")
+                        .HasDatabaseName("IX_Signal_Asset_Device");
 
                     b.ToTable("Signals");
                 });
@@ -511,17 +504,6 @@ namespace Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Notification");
-                });
-
-            modelBuilder.Entity("Domain.Entities.Signal", b =>
-                {
-                    b.HasOne("Domain.Entities.SignalTypes", "SignalType")
-                        .WithMany()
-                        .HasForeignKey("SignalTypeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("SignalType");
                 });
 
             modelBuilder.Entity("Domain.Entities.Asset", b =>

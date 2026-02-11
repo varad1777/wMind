@@ -18,6 +18,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using MyApp.Infrastructure.Services; // For ISignalLookupService
 
 namespace MyApp.Infrastructure.Services
 {
@@ -283,25 +284,22 @@ namespace MyApp.Infrastructure.Services
             // Acquire semaphore to limit concurrent network connections/polls.
             // This ensures we don't overload network/DB/CPU when many device loops run.
            
-            await _semaphore.WaitAsync(ct);  // this basically used to controll the concurrent access.
-            //----
+// Acquire semaphore to limit concurrent network connections/polls.
+            await _semaphore.WaitAsync(ct);
+            
             try
             {
                 // Connect to device TCP with a short timeout
                 using var tcp = new TcpClient();
                 using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-                // Link tokens so cancelling the overall loop cancels connect
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, connectCts.Token);
 
                 await tcp.ConnectAsync(ip, port, linked.Token);
 
-                // Using in-repo ModbusTcpClient helper to avoid NModbus4 dependency
-
                 var now = DateTime.UtcNow;
-                // tuple: (deviceSlaveId, slaveIndex, SignalType, Value, Unit, RegisterAddress)
                 var allReads = new List<(Guid deviceSlaveId, int slaveIndex, string SignalType, double Value, string Unit, int RegisterAddress)>();
 
-                // --- Group protoPorts by slaveIndex (unit id) so we never mix different slaves in one request ---
+                // --- Group protoPorts by slaveIndex (unit id) ---
                 var protoGroups = protoPorts
                     .GroupBy(x => ((DeviceSlave)x.DeviceSlave).slaveIndex)
                     .ToDictionary(g => g.Key, g => g.OrderBy(p => p.ProtoAddr).ToList());
@@ -309,15 +307,15 @@ namespace MyApp.Infrastructure.Services
                 // For each slave (unit id) build contiguous ranges and read separately
                 foreach (var kv in protoGroups)
                 {
-                    int unitId = kv.Key; // the slaveIndex/unit id to use for Modbus requests
-                    var itemsForSlave = kv.Value; // ordered by ProtoAddr
+                    int unitId = kv.Key;
+                    var itemsForSlave = kv.Value;
 
-                    // Build ranges for this slave alone (each up to ModbusMaxRegistersPerRead)
+                    // Build ranges for this slave
                     var slaveRanges = new List<(int Start, int Count, List<dynamic> Items)>();
                     int j = 0;
                     while (j < itemsForSlave.Count)
                     {
-                        int start = itemsForSlave[j].ProtoAddr; //0 
+                        int start = itemsForSlave[j].ProtoAddr;
                         int end = start + itemsForSlave[j].Length - 1;
                         var items = new List<dynamic> { itemsForSlave[j] };
                         j++;
@@ -344,21 +342,17 @@ namespace MyApp.Infrastructure.Services
                         slaveRanges.Add((start, count, items));
                     }
 
-                    // Now perform reads for each range for THIS unitId
+                    // Perform reads for each range
                     foreach (var r in slaveRanges)
                     {
                         if (r.Start < 0 || r.Start > ushort.MaxValue) { _log.LogWarning("Skipping invalid start {Start}", r.Start); continue; }
                         if (r.Count <= 0) continue;
 
                         StringBuilder sb = new();
-
-                        // Range header (buffered output)
                         sb.AppendLine();
                         sb.AppendLine(new string('=', 80));
                         sb.AppendLine($"Device: {device.DeviceId} | Ip={ip}:{port} | UnitId={unitId} | RangeStart={r.Start} Count={r.Count}");
                         sb.AppendLine(new string('-', 80));
-
-                        // included registers for this range
                         sb.AppendLine("Included registers:");
                         foreach (var ent in r.Items)
                         {
@@ -367,29 +361,24 @@ namespace MyApp.Infrastructure.Services
                             sb.AppendLine($"  - slaveIndex={ds.slaveIndex}, DBAddr={reg.RegisterAddress}, Length={ent.Length}, DataType={reg.DataType}");
                         }
                         sb.AppendLine();
-                        //--------
-
-
 
                         try
                         {
-                            // IMPORTANT: use the slave's unit id here, not the single device-level slaveId
                             ushort[] regs = await ModbusTcpClient.ReadHoldingRegistersAsync(tcp, (byte)unitId, (ushort)r.Start, (ushort)r.Count, ct);
                             sb.AppendLine($"Read {regs.Length} registers from unit={unitId} start={r.Start}");
                             sb.AppendLine(new string('-', 80));
 
-                            // Reset failure counts for registers in this successful read
+                            // Reset failure counts
                             foreach (var ent in r.Items)
                             {
                                 var reg = (Register)ent.Register;
                                 _failureCounts.TryRemove(reg.RegisterId, out _);
                             }
 
-                            // Table header
                             sb.AppendLine($"{"Time (UTC)".PadRight(30)} | {"Unit".PadRight(6)} | {"Register".PadRight(8)} | {"Value".PadRight(15)} | {"Unit".PadRight(8)}");
                             sb.AppendLine(new string('-', 80));
 
-                            // Decode each register in this range
+                            // Decode each register
                             foreach (var entry in r.Items)
                             {
                                 var ds = (DeviceSlave)entry.DeviceSlave;
@@ -416,10 +405,8 @@ namespace MyApp.Infrastructure.Services
 
                                         ushort r1 = regs[relativeIndex];
                                         ushort r2 = regs[relativeIndex + 1];
-
-                                        // Build byte array for float32 decoding
                                         byte[] bytes = new byte[4];
-                                        bool wordSwap = reg.WordSwap; // assume Register has a WordSwap property
+                                        bool wordSwap = reg.WordSwap;
 
                                         if (wordSwap)
                                         {
@@ -441,14 +428,12 @@ namespace MyApp.Infrastructure.Services
 
                                         float raw = BitConverter.ToSingle(bytes, 0);
 
-                                        // Clamp invalid / extreme values
                                         if (float.IsNaN(raw) || float.IsInfinity(raw) || Math.Abs(raw) > 1e6)
                                         {
                                             sb.AppendLine($"Detected invalid float for slave {ds.slaveIndex}, using fallback/zero.");
                                             raw = 0;
                                         }
 
-                                        // Safer fallback logic
                                         if ((r1 == 0 && r2 == 0) || Math.Abs(raw) < 1e-3)
                                         {
                                             double scaledFallback = r1;
@@ -465,10 +450,9 @@ namespace MyApp.Infrastructure.Services
                                         finalValue = regs[relativeIndex] * reg.Scale;
                                     }
 
-                                    // add to telemetry buffer
+                                    // Add to telemetry buffer
                                     allReads.Add((ds.deviceSlaveId, ds.slaveIndex, reg.DataType ?? $"Port{ds.slaveIndex}", finalValue, reg.Unit ?? string.Empty, reg.RegisterAddress));
 
-                                    // append row to buffer
                                     sb.AppendLine($"{now:O}".PadRight(30) + " | " +
                                                   ds.slaveIndex.ToString().PadRight(6) + " | " +
                                                   reg.RegisterAddress.ToString().PadRight(8) + " | " +
@@ -482,8 +466,6 @@ namespace MyApp.Infrastructure.Services
                             }
 
                             sb.AppendLine(new string('=', 80));
-
-                            // Print the whole buffer atomically to avoid mixing with other device outputs
                             lock (_consoleLock)
                             {
                                 Console.Write(sb.ToString());
@@ -491,8 +473,6 @@ namespace MyApp.Infrastructure.Services
                         }
                         catch (Modbus.SlaveException sex)
                         {
-                            // _log.LogError(sex, "Modbus SlaveException device {Device} unit={UnitId} start={Start} count={Count}", device.DeviceId, unitId, r.Start, r.Count);
-
                             var regsToConsider = r.Items.Select(it => ((Register)it.Register).RegisterId).ToList();
                             try
                             {
@@ -503,8 +483,6 @@ namespace MyApp.Infrastructure.Services
                                 {
                                     var id = reg.RegisterId;
                                     int newCount = _failureCounts.AddOrUpdate(id, 1, (_, old) => old + 1);
-                                    // _log.LogWarning("Failure count for register {RegisterAddress} (Id={Id}) = {Count}", reg.RegisterAddress, id, newCount);
-
                                     if (newCount >= _failThreshold && reg.IsHealthy) toMark.Add(id);
                                 }
 
@@ -513,7 +491,6 @@ namespace MyApp.Infrastructure.Services
                                     var markRegs = await db.Registers.Where(reg => toMark.Contains(reg.RegisterId)).ToListAsync(ct);
                                     foreach (var mr in markRegs) mr.IsHealthy = false;
                                     await db.SaveChangesAsync(ct);
-                                    // _log.LogWarning("Marked {Count} registers unhealthy for device {Device}", markRegs.Count, device.DeviceId);
                                 }
                             }
                             catch (Exception markEx)
@@ -525,98 +502,142 @@ namespace MyApp.Infrastructure.Services
                         {
                             _log.LogError(ex, "Error reading device {Device} unit={UnitId} start={Start} count={Count}", device.DeviceId, unitId, r.Start, r.Count);
                         }
-
-
-                        //-----
                     }
-                } 
+                }
 
-                // Prepare telemetry DTOs and push them to SignalR (no DB save)
+                // ═══════════════════════════════════════════════════════
+                // STEP 1: Get SignalId Lookup from Asset Database
+                // ═══════════════════════════════════════════════════════
                 if (allReads.Count > 0)
                 {
                     try
                     {
-                        var telemetryDtos = allReads.Select(r =>
+                        Dictionary<string, Guid>? signalLookup = null;
+                        
+                        try
                         {
-                            // map to your TelemetryDto shape - keep DevicePortId param but pass deviceSlaveId for compatibility
-                            return new TelemetryDto(
-                                DeviceId: device.DeviceId,
-                                deviceSlaveId: r.deviceSlaveId,
-                                slaveIndex: r.slaveIndex,
-                                RegisterAddress: r.RegisterAddress,
-                                SignalType: r.SignalType,
-                                Value: r.Value,
-                                Unit: r.Unit,
-                                Timestamp: DateTime.Now
+                            using var lookupScope = _sp.CreateScope();
+                            var signalLookupService = lookupScope.ServiceProvider.GetRequiredService<ISignalLookupService>();
+                            signalLookup = await signalLookupService.GetSignalLookupForDeviceAsync(device.DeviceId, ct);
+                            
+                            if (signalLookup != null && signalLookup.Any())
+                            {
+                                _log.LogDebug("✅ Loaded {Count} signal mappings for device {Device}", 
+                                    signalLookup.Count, device.DeviceId);
+                            }
+                            else
+                            {
+                                _log.LogDebug("⚠️  No signal mappings found for device {Device}", device.DeviceId);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _log.LogWarning(ex, "❌ Could not load signal mappings for device {Device}", device.DeviceId);
+                        }
 
-                            );
-                        }).ToList();
+                        // ═══════════════════════════════════════════════════════
+                        // STEP 2: Map Modbus Data to SignalIds
+                        // ═══════════════════════════════════════════════════════
+                        var signalTelemetryList = new List<SignalTelemetryDto>();
+                        int unmappedCount = 0;
+
+                        foreach (var r in allReads)
+                        {
+                            string lookupKey = $"{device.DeviceId}_{r.RegisterAddress}";
+
+                            if (signalLookup != null && signalLookup.TryGetValue(lookupKey, out Guid signalId))
+                            {
+                                var signalDto = new SignalTelemetryDto(
+                                    SignalId: signalId,
+                                    Value: r.Value,
+                                    Timestamp: now
+                                );
+                                signalTelemetryList.Add(signalDto);
+                            }
+                            else
+                            {
+                                unmappedCount++;
+                            }
+                        }
+
+                        if (unmappedCount > 0)
+                        {
+                            _log.LogDebug("⚠️  {UnmappedCount} out of {TotalCount} registers have no signal mapping for device {Device}", 
+                                unmappedCount, allReads.Count, device.DeviceId);
+                        }
+
+                        // ═══════════════════════════════════════════════════════
+                        // STEP 3: Publish to RabbitMQ (NEW FORMAT: SignalId-based)
+                        // ═══════════════════════════════════════════════════════
+                        if (signalTelemetryList.Any())
+                        {
+                            try
+                            {
+                                foreach (var dto in signalTelemetryList)
+                                {
+                                    Console.WriteLine($"📤 Queue → SignalId: {dto.SignalId}, Value: {dto.Value}, Time: {dto.Timestamp:HH:mm:ss}");
+                                    ct.ThrowIfCancellationRequested();
+                                    await _rabbit.PublishAsync(dto, ct);
+                                }
+                                
+                                _log.LogInformation("✅ Published {Count} signal telemetry to RabbitMQ", signalTelemetryList.Count);
+                            }
+                            catch (Exception rmqEx)
+                            {
+                                _log.LogError(rmqEx, "❌ Failed to publish to RabbitMQ for device {Device}", device.DeviceId);
+                            }
+                        }
+
+                        // ═══════════════════════════════════════════════════════
+                        // STEP 4: Send to SignalR (Keep old format)
+                        // ═══════════════════════════════════════════════════════
+                        var telemetryDtos = allReads.Select(r => new TelemetryDto(
+                            DeviceId: device.DeviceId,
+                            deviceSlaveId: r.deviceSlaveId,
+                            slaveIndex: r.slaveIndex,
+                            RegisterAddress: r.RegisterAddress,
+                            SignalType: r.SignalType,
+                            Value: r.Value,
+                            Unit: r.Unit,
+                            Timestamp: now
+                        )).ToList();
 
                         if (telemetryDtos.Any())
                         {
                             try
                             {
-                                await Hub.Clients.Group(device.DeviceId.ToString()).SendAsync("TelemetryUpdate", telemetryDtos, ct);
+                                await _hub.Clients.Group(device.DeviceId.ToString())
+                                    .SendAsync("TelemetryUpdate", telemetryDtos, ct);
                             }
                             catch (Exception hubEx)
                             {
-                                _log.LogWarning(hubEx, "Failed to push telemetry to SignalR for device {Device}", device.DeviceId);
-                            }
-
-                            try
-                            {
-                                // Option B: publish individual telemetry items
-                                foreach (var dto in telemetryDtos)
-                                {
-                                    Console.WriteLine($"data doing in queue {dto.Value}");
-
-                                    ct.ThrowIfCancellationRequested();
-                                    await _rabbit.PublishAsync(dto, ct);
-                                }
-                            }
-                            catch (Exception rmqEx)
-                            {
-                                _log.LogWarning(rmqEx, "Failed to publish telemetry to RabbitMQ for device {Device}", device.DeviceId);
+                                _log.LogWarning(hubEx, "❌ Failed to push to SignalR for device {Device}", device.DeviceId);
                             }
                         }
                     }
-                    catch (Exception hubEx)
+                    catch (Exception ex)
                     {
-                        _log.LogWarning(hubEx, "Failed to prepare telemetry for device {Device}", device.DeviceId);
+                        _log.LogError(ex, "❌ Failed to process telemetry for device {Device}", device.DeviceId);
                     }
-
-                    _log.LogDebug("Prepared {Count} telemetry rows for device {Device}", allReads.Count, device.DeviceId);
                 }
             }
             catch (SocketException s_ex)
             {
-                // _log.LogWarning(s_ex, "Device {Device} unreachable {Ip}:{Port}", device.DeviceId, ip, port);
+                // Device unreachable
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                // polling was cancelled via token, simply return
-                // _log.LogDebug("Polling cancelled for device {Device}", device.DeviceId);
+                // Polling cancelled
             }
             catch (Exception ex)
             {
-                // _log.LogError(ex, "Error polling device {Device}", device.DeviceId);
+                _log.LogError(ex, "Error polling device {Device}", device.DeviceId);
             }
             finally
             {
-                // Always release the semaphore even on exceptions
                 _semaphore.Release();
             }
 
-           
-            
-            
-            
-            //----
-            
-            
-            
-            
-            // Return the poll interval (ms) for next loop delay
             return pollIntervalMs;
         }
 

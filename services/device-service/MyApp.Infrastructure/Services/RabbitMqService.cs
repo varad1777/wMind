@@ -1,7 +1,8 @@
-﻿// Required usings
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using System;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,9 +15,12 @@ namespace MyApp.Infrastructure.Services
         private readonly ConnectionFactory _factory;
         private readonly string _exchange;
         private readonly string _queueName;
+        private readonly ILogger<RabbitMqService> _log;
 
-        public RabbitMqService(IConfiguration config)
+        public RabbitMqService(IConfiguration config, ILogger<RabbitMqService> log)
         {
+            _log = log;
+
             _factory = new ConnectionFactory
             {
                 HostName = config.GetValue<string>("RabbitMQ:Host") ?? "localhost",
@@ -28,16 +32,12 @@ namespace MyApp.Infrastructure.Services
             _exchange = config.GetValue<string>("RabbitMQ:Exchange") ?? "telemetry_exchange";
             _queueName = config.GetValue<string>("RabbitMQ:Queue") ?? "telemetry_queue";
 
-            // synchronous connect (works fine during startup)
             _connection = _factory.CreateConnection();
 
-            // ensure exchange + queue + binding exist (idempotent)
             using var ch = _connection.CreateModel();
 
-            // durable fanout exchange (messages routed to all bound queues)
             ch.ExchangeDeclare(exchange: _exchange, type: ExchangeType.Fanout, durable: true, autoDelete: false);
-            // also we have direct also which use the key 
-            // declare the queue (durable so it survives broker restart)
+
             ch.QueueDeclare(
                 queue: _queueName,
                 durable: true,
@@ -46,35 +46,52 @@ namespace MyApp.Infrastructure.Services
                 arguments: null
             );
 
-            // bind queue to exchange. For fanout routingKey is ignored.
             ch.QueueBind(queue: _queueName, exchange: _exchange, routingKey: "");
         }
 
-        /// <summary>
-        /// Publish a single message. Publishing to the exchange will deliver to all bound queues (fanout).
-        /// </summary>
-        public Task PublishAsync<T>(T payload, CancellationToken ct = default)
+        public Task PublishAsync<T>(T message, CancellationToken ct = default)
         {
-            if (ct.IsCancellationRequested) return Task.FromCanceled(ct);
+            if (ct.IsCancellationRequested)
+                return Task.FromCanceled(ct);
 
-            var body = JsonSerializer.SerializeToUtf8Bytes(payload);
+            try
+            {
+                var json = JsonSerializer.Serialize(message);
+                var body = Encoding.UTF8.GetBytes(json);
 
-            using var channel = _connection.CreateModel();
-            var props = channel.CreateBasicProperties();
-            props.Persistent = true; // mark message as persistent; queue must be durable too
-            props.ContentType = "application/json";
-            props.MessageId = Guid.NewGuid().ToString();
-            props.Timestamp = new AmqpTimestamp(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+                using var channel = _connection.CreateModel();
 
-            // publish to exchange; routingKey ignored for fanout
-            channel.BasicPublish(exchange: _exchange, routingKey: "", basicProperties: props, body: body);
+                var props = channel.CreateBasicProperties();
+                props.Persistent = true;
+                props.ContentType = "application/json";
+                props.MessageId = Guid.NewGuid().ToString();
+                props.Timestamp = new AmqpTimestamp(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
-            return Task.CompletedTask;
+                // ✅ Recommended: publish via exchange
+                channel.BasicPublish(
+                    exchange: _exchange,
+                    routingKey: "",
+                    basicProperties: props,
+                    body: body
+                );
+
+                return Task.CompletedTask;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Failed to publish message to RabbitMQ");
+                throw;
+            }
         }
 
         public void Dispose()
         {
-            try { _connection?.Close(); _connection?.Dispose(); } catch { /* ignore */ }
+            try
+            {
+                _connection?.Close();
+                _connection?.Dispose();
+            }
+            catch { }
         }
     }
 }

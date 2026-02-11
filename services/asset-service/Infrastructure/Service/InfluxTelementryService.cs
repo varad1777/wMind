@@ -56,36 +56,34 @@ namespace Infrastructure.Service
 
         }
 
-        public async Task WriteTelemetryAsync(InfluxTelementryDto dto)
-        {
-            try
-            {
-                var point = PointData
-                    .Measurement("signals")
-                    .Tag("assetId", dto.AssetId.ToString())
-                    .Tag("signalTypeId", dto.SignalTypeId.ToString())
-                    .Tag("deviceId", dto.DeviceId.ToString())
-                    .Tag("devicePortId", dto.deviceSlaveId.ToString())
-                    .Tag("mappingId", dto.MappingId.ToString())
-                    .Tag("RegisterAdress", dto.RegisterAddress.ToString())
-                    .Tag("SignalName", dto.SignalType.ToString())
-                    .Field("value", dto.Value)
-                    .Field("unit", dto.Unit)
-                    .Timestamp(dto.Timestamp, WritePrecision.Ns);
+      public async Task WriteTelemetryAsync(InfluxTelementryDto dto)
+{
+    try
+    {
+        var point = PointData
+            .Measurement("signals")
+            .Tag("signalId", dto.SignalId.ToString())   // ✅ primary identifier
+            .Tag("assetId", dto.AssetId.ToString())
+            .Tag("signalTypeId", dto.SignalTypeId.ToString())
+            .Tag("deviceId", dto.DeviceId.ToString())
+            .Tag("SignalName", dto.SignalType)          // no ToString() if already string
+            .Field("value", dto.Value)
+            .Field("unit", dto.Unit)
+            .Timestamp(dto.Timestamp, WritePrecision.Ns);
 
-                var writeApi = _client.GetWriteApiAsync();
-                await writeApi.WritePointAsync(point, _bucket, _org);
+        var writeApi = _client.GetWriteApiAsync();
+        await writeApi.WritePointAsync(point, _bucket, _org);
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex,
+            "Failed to write telemetry to InfluxDB | SignalId:{SignalId} | Asset:{AssetId}",
+            dto.SignalId, dto.AssetId);
 
-                //Log.Information("Telemetry written successfully | Asset:{AssetId} | Signal:{SignalTypeId} | Value:{Value}",
-                //    dto.AssetId, dto.SignalTypeId, dto.Value);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Failed to write telemetry to InfluxDB | Asset:{AssetId} | Signal:{SignalTypeId}",
-                    dto.AssetId, dto.SignalTypeId);
-                throw;
-            }
-        }
+        throw;
+    }
+}
+
 
 
         public async Task<TelemetryResponseDto> GetTelemetrySeriesAsync(TelemetryRequestDto request)
@@ -357,7 +355,6 @@ namespace Infrastructure.Service
             if (relativeTime == "-7d") return now.AddDays(-7);
             if (relativeTime == "-30d") return now.AddDays(-30);
 
-            // Generic parser for formats like "-5h", "-10d", etc.
             var match = System.Text.RegularExpressions.Regex.Match(relativeTime, @"^-(\d+)([hd])$");
             if (match.Success)
             {
@@ -387,203 +384,20 @@ namespace Infrastructure.Service
             if (duration <= TimeSpan.FromHours(6))
                 return "5s";
             if (duration <= TimeSpan.FromDays(1))
-                return "1m";       // Today / last 24h → raw 1s data
+                return "1m";       
             else if (duration <= TimeSpan.FromDays(7))
-                return "5m";       // Last 7 days → 1 min aggregation
+                return "5m";      
             else if (duration <= TimeSpan.FromDays(30))
-                return "10m";       // Last 1 month → 5 min aggregation
+                return "10m";       
             else if (duration <= TimeSpan.FromDays(90))
-                return "30m";      // Last 3 months → 15 min aggregation
+                return "30m";     
             else if (duration <= TimeSpan.FromDays(180))
-                return "1h";      // Last 6 months → 30 min aggregation
+                return "1h";     
             else if (duration <= TimeSpan.FromDays(365))
-                return "2h";       // Last 1 year → 1 hour aggregation
+                return "2h";       
             else
-                return "5h";       // >1 year → 1 hour
+                return "5h";       
         }
-
-        //private async Task<int> GetRowsCountFromInfluxDbAsync(List<string> mappingIds, DateTime startTime, DateTime endTime)
-        //{
-        //    try
-        //    {
-        //        if (mappingIds == null || mappingIds.Count == 0)
-        //        {
-        //            _logger.LogWarning("No mapping IDs provided for count query.");
-        //            return 0;
-        //        }
-
-        //        _logger.LogInformation("Preparing count query for {Count} mapping IDs", mappingIds.Count);
-
-        //        var fluxStartTime = startTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
-        //        var fluxEndTime = endTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
-
-        //        string fluxArray = string.Join(",", mappingIds.Select(id => $"\"{id.ToLower()}\""));
-
-        //        string fluxQuery = $@"
-        //mappingIds = [{fluxArray}]
-        //from(bucket: ""{_bucket}"")
-        //  |> range(start: {fluxStartTime}, stop: {fluxEndTime})
-        //  |> filter(fn: (r) => r._field == ""value"")
-        //  |> filter(fn: (r) => contains(value: r.mappingId, set: mappingIds))
-        //  |> count()";
-
-        //        _logger.LogInformation("Flux Query: {FluxQuery}", fluxQuery);
-
-        //        var queryApi = _client.GetQueryApi();
-        //        var tables = await queryApi.QueryAsync(fluxQuery, _org); // replace with your org
-
-        //        int totalCount = tables.Sum(table => table.Records.Sum(r => Convert.ToInt64(r.GetValue())));
-        //        _logger.LogInformation("Total rows returned from InfluxDB: {TotalCount}", totalCount);
-
-        //        return totalCount;
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex, "Error while querying InfluxDB for row count.");
-        //        throw;
-        //    }
-        //}
-
-
-
-
-        //public async Task PushToReportRequestQueueAsync(RequestReport dto)
-        //{
-        //    try
-        //    {
-        //        _logger.LogInformation("Processing report request for AssetID: {AssetID}", dto.AssetID);
-
-        //        // 1️⃣ Validate Asset
-        //        bool isAssetExist = await _dbContext.Assets.AnyAsync(a => a.AssetId == dto.AssetID);
-        //        if (!isAssetExist)
-        //        {
-        //            _logger.LogWarning("Asset not found: {AssetID}", dto.AssetID);
-        //            throw new Exception("No Asset Found");
-        //        }
-
-        //        // 2️⃣ Validate SignalIDs
-        //        List<Guid> signalIds = dto.SignalIDs;
-        //        var validSignalIds = await _dbContext.SignalTypes
-        //            .Where(s => signalIds.Contains(s.SignalTypeID))
-        //            .Select(s => s.SignalTypeID)
-        //            .ToListAsync();
-
-        //        var invalidSignals = signalIds.Except(validSignalIds).ToList();
-        //        if (invalidSignals.Any())
-        //        {
-        //            _logger.LogWarning("Invalid SignalIDs requested: {InvalidSignals}", string.Join(",", invalidSignals));
-        //            throw new Exception($"One or more SignalIDs are invalid: {string.Join(",", invalidSignals)}");
-        //        }
-
-        //        _logger.LogInformation("Fetching mapping IDs for AssetID {AssetID}", dto.AssetID);
-
-        //        // 3️⃣ Fetch MappingIDs
-        //        var mappingIds = await _dbContext.MappingTable
-        //            .Where(m => m.AssetId == dto.AssetID && signalIds.Contains(m.SignalTypeId))
-        //            .Select(m => m.MappingId.ToString().ToLower())
-        //            .ToListAsync();
-
-        //        if (!mappingIds.Any())
-        //        {
-        //            _logger.LogWarning("No mapping found for AssetID {AssetID} with requested signals", dto.AssetID);
-        //            throw new Exception("No mapping found for the given Asset and SignalIDs");
-        //        }
-
-        //        _logger.LogInformation("Found {Count} mapping IDs", mappingIds.Count);
-
-        //        // 4️⃣ Get total rows from InfluxDB
-        //        long totalRows = await GetRowsCountFromInfluxDbAsync(
-        //            mappingIds,
-        //            dto.StartDate ?? DateTime.UtcNow.AddDays(-1),
-        //            dto.EndDate ?? DateTime.UtcNow
-        //        );
-
-        //        _logger.LogInformation("Total rows for report: {TotalRows}", totalRows);
-
-        //        // 5️⃣ Determine report format based on row count
-        //        string finalReportFormat = DetermineReportFormat(dto.ReportFormat, totalRows);
-
-        //        _logger.LogInformation("Requested format: {Requested}, Final format: {Final}, Total rows: {Rows}",
-        //            dto.ReportFormat, finalReportFormat, totalRows);
-
-        //        // 6️⃣ Create report request for queue
-        //        var reportRequest = new ReportQueueItem
-        //        {
-        //            AssetId = dto.AssetID.ToString(),
-        //            SignalIds = dto.SignalIDs,
-        //            MappingIds = mappingIds,
-        //            StartDate = dto.StartDate ?? DateTime.UtcNow.AddDays(-1),
-        //            EndDate = dto.EndDate ?? DateTime.UtcNow,
-        //            ReportFormat = finalReportFormat,
-        //            TotalRows = totalRows,
-        //            RequestedAt = DateTime.UtcNow
-        //        };
-
-        //        _queue.PublishAsync(reportRequest);
-        //        // TODO: Push to background queue for actual report generation
-        //        // await _reportQueue.EnqueueAsync(reportRequest);
-        //         _logger.LogInformation("Queue Message Format: {@ReportRequest}" ,reportRequest );
-        //        _logger.LogInformation("Report request queued successfully for AssetID: {AssetID} with format: {Format}",
-        //            dto.AssetID, finalReportFormat);
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex, "Error while processing report request for AssetID: {AssetID}", dto.AssetID);
-        //        throw;
-        //    }
-        //}
-
-        ///// <summary>
-        ///// Determines the appropriate report format based on row count and user preference
-        ///// </summary>
-        //private string DetermineReportFormat(string requestedFormat, long totalRows)
-        //{
-        //    // Handle case where no rows exist
-        //    if (totalRows == 0)
-        //    {
-        //        _logger.LogWarning("No data found for the specified criteria");
-        //        throw new Exception("No data available for the specified date range and signals");
-        //    }
-
-        //    // Check if data exceeds CSV limit
-        //    if (totalRows > _maxCsvRows)
-        //    {
-        //        _logger.LogError("Data volume exceeds maximum limit. Rows: {TotalRows}, Max: {MaxRows}",
-        //            totalRows, _maxCsvRows);
-        //        throw new Exception(
-        //            $"The requested report contains {totalRows:N0} rows, which exceeds the maximum limit of {_maxCsvRows:N0} rows. " +
-        //            "Please reduce the date range or number of signals, or request aggregated data instead."
-        //        );
-        //    }
-
-        //    // If user requested Excel but data exceeds Excel limit
-        //    if (requestedFormat.Equals("Excel", StringComparison.OrdinalIgnoreCase) && totalRows > _maxExcelRows)
-        //    {
-        //        _logger.LogWarning(
-        //            "Excel format requested but row count ({TotalRows}) exceeds Excel limit ({MaxExcel}). Switching to CSV.",
-        //            totalRows, _maxExcelRows
-        //        );
-        //        return "CSV";
-        //    }
-
-        //    // If user requested CSV and data is within limit
-        //    if (requestedFormat.Equals("CSV", StringComparison.OrdinalIgnoreCase) && totalRows <= _maxCsvRows)
-        //    {
-        //        return "CSV";
-        //    }
-
-        //    // If user requested Excel and data is within Excel limit
-        //    if (requestedFormat.Equals("Excel", StringComparison.OrdinalIgnoreCase) && totalRows <= _maxExcelRows)
-        //    {
-        //        return "Excel";
-        //    }
-
-        //    // Default: use CSV for anything not specified
-        //    _logger.LogInformation("Using CSV format as default for {TotalRows} rows", totalRows);
-        //    return "CSV";
-        //}
-
-
 
         private async Task<int> GetRowsCountFromInfluxDbAsync(List<string> mappingIds, DateTime startTime, DateTime endTime)
         {
@@ -603,12 +417,12 @@ namespace Infrastructure.Service
                 string fluxArray = string.Join(",", mappingIds.Select(id => $"\"{id.ToLower()}\""));
 
                 string fluxQuery = $@"
-mappingIds = [{fluxArray}]
-from(bucket: ""{_bucket}"")
-  |> range(start: {fluxStartTime}, stop: {fluxEndTime})
-  |> filter(fn: (r) => r._field == ""value"")
-  |> filter(fn: (r) => contains(value: r.mappingId, set: mappingIds))
-  |> count()";
+                    mappingIds = [{fluxArray}]
+                    from(bucket: ""{_bucket}"")
+                    |> range(start: {fluxStartTime}, stop: {fluxEndTime})
+                    |> filter(fn: (r) => r._field == ""value"")
+                    |> filter(fn: (r) => contains(value: r.mappingId, set: mappingIds))
+                    |> count()";
 
                 _logger.LogInformation("Flux Query: {FluxQuery}", fluxQuery);
 
