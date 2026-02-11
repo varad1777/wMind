@@ -110,7 +110,7 @@ namespace Infrastructure.Service
             _consumer = new EventingBasicConsumer(_channel);
             // wire up the async consumer handler
             _consumer.Received += async (sender, ea) => await OnReceivedAsync(ea);
-            _channel.BasicConsume(queue: _options.Queue, autoAck: false, consumer: _consumer);
+            //_channel.BasicConsume(queue: _options.Queue, autoAck: false, consumer: _consumer);
 
             _logger.LogInformation("TelemetryBackgroundService started consuming queue {Queue}", _options.Queue);
             await base.StartAsync(cancellationToken);
