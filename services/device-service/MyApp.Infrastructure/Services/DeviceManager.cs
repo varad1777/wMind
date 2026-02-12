@@ -178,7 +178,6 @@ namespace MyApp.Infrastructure.Services
 
         public async Task UpdateDeviceAsync(Guid deviceId, UpdateDeviceDto dto,DeviceConfigurationDto? configDto = null, CancellationToken ct = default)
         {
-            //    FIX: Use FirstOrDefaultAsync instead of FindAsync
             var device = await _db.Devices
                 .FirstOrDefaultAsync(d => d.DeviceId == deviceId, ct);
 
@@ -234,7 +233,7 @@ namespace MyApp.Infrastructure.Services
 
             if (dto.Protocol.HasValue)
             {
-                // Optional: prevent protocol change when configuration exists
+                //prevent protocol change when configuration exists
                 if (device.DeviceConfigurationId.HasValue)
                     throw new InvalidOperationException(
                         "Cannot change protocol when configuration already exists.");
@@ -245,7 +244,7 @@ namespace MyApp.Infrastructure.Services
             // ---------------- Configuration ----------------
             if (configDto != null)
             {
-                //    CRITICAL FIX: Sync device protocol with configuration protocol
+                //  Sync device protocol with configuration protocol
                 device.Protocol = configDto.Protocol;
 
                 // Helper to apply protocol-aware fields
@@ -292,7 +291,7 @@ namespace MyApp.Infrastructure.Services
 
                     if (!otherUses)
                     {
-                        //    FIX: Use FirstOrDefaultAsync for tracking
+                        // FIX: Use FirstOrDefaultAsync for tracking
                         targetCfg = await _db.DeviceConfigurations
                             .FirstOrDefaultAsync(c => c.ConfigurationId == cfgId, ct);
 
@@ -330,7 +329,7 @@ namespace MyApp.Infrastructure.Services
                     targetCfg.ConfigurationId, deviceId, configDto.Protocol);
             }
 
-            //    CRITICAL FIX: Mark device as modified
+            // Mark device as modified
             _db.Entry(device).State = EntityState.Modified;
 
             // Save all changes
@@ -509,7 +508,7 @@ namespace MyApp.Infrastructure.Services
             if (dto == null)
                 throw new ArgumentNullException(nameof(dto));
 
-            //   FIX: Use FirstOrDefaultAsync instead of FindAsync for better tracking
+            //  Use FirstOrDefaultAsync instead of FindAsync for better tracking
             var device = await _db.Devices
                 .FirstOrDefaultAsync(d => d.DeviceId == deviceId, ct);
 
