@@ -31,6 +31,7 @@ import ProtectedRoute from "./config/ProtectedRoute";
 import NotFound from "./pages/NotFound";
 import ForbiddenRedirect from "./pages/ForbiddenRedirect";
 import Gateways from "./pages/Gateways";
+import AddNodeFrom from "./devices/AddNodeFrom";
 
 export default function App() {
   const [showLoader, setShowLoader] = useState(true);
@@ -87,6 +88,7 @@ export default function App() {
               <Route path="Asset/Alerts/:assetId" element={<AlertsPage/>} />
               <Route path="/forbidden" element={<ForbiddenRedirect />} />
               <Route path="/gateways" element={<Gateways />} />
+              <Route path="/devices/nodes/:id" element={<AddNodeFrom />} />
 
               
             </Route>

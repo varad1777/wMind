@@ -290,20 +290,37 @@ export default function Devices() {
                           </Button>
                         )}
 
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          title="Slave"
-                          onClick={() =>
-                            navigate(`/devices/ports/${d.deviceId}`)
-                          }
-                          className="flex items-center gap-1"
-                        >
-                          <HdmiPort className="h-4 w-4" />
-                          <span className="hidden md:inline slave-device-btn">
-                            Slave
-                          </span>
-                        </Button>
+                        {/* Protocol Based Button */}
+                        {d.protocol === 1 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            title="Slave"
+                            onClick={() => navigate(`/devices/ports/${d.deviceId}`)}
+                            className="flex items-center gap-1"
+                          >
+                            <HdmiPort className="h-4 w-4" />
+                            <span className="hidden md:inline slave-device-btn">
+                              Slave
+                            </span>
+                          </Button>
+                        )}
+
+                        {d.protocol === 2 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            title="Node"
+                            onClick={() => navigate(`/devices/nodes/${d.deviceId}`)}
+                            className="flex items-center gap-1"
+                          >
+                            <HdmiPort className="h-4 w-4" />
+                            <span className="hidden md:inline node-device-btn">
+                              Node
+                            </span>
+                          </Button>
+                        )}
+
 
                         {d.deviceConfiguration && (
                           <Button
