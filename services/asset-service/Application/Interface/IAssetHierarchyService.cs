@@ -1,6 +1,5 @@
 ﻿using Application.DTOs;
 using Domain.Entities;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Application.Interface
 {
@@ -12,16 +11,16 @@ namespace Application.Interface
 
         Task<(bool Success, string Message)> UpdateAssetName(UpdateAssetDto dto);
 
-        Task<bool> DeleteAsset(Guid AssetId);
+        Task<bool> DeleteAsset(Guid assetId);
         Task<List<AssetDto>> SearchAssetsAsync(string? searchTerm);
 
         Task<List<AssetDto>> GetDeletedAssetsAsync();
-
         Task<bool> RestoreAssetAsync(Guid assetId);
+
         Task<string?> GetAssetNameAsync(Guid assetId);
-        Task<SignalTypes?> GetSignalTypeAsync(Guid signalTypeId);
+        Task<SignalTypeDto?> GetSignalTypeAsync(Guid signalTypeId);
+        Task<SignalDto?> GetSignalByIdAsync(Guid signalId);
 
         Task<AssetUploadResponse> BulkInsertAssetsAsync(AssetUploadRequest assets);
-
     }
 }

@@ -51,6 +51,7 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
 
 builder.Services.AddScoped<IDeviceManager, DeviceManager>();
 builder.Services.AddScoped<IGatewayService, GatewayService>();
+builder.Services.AddScoped<ISignalLookupService, SignalLookupService>();
 builder.Services.AddHostedService<ModbusPollerHostedService>();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<RabbitMqService>();

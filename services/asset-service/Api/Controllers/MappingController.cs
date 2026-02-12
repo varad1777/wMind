@@ -38,6 +38,10 @@ namespace MappingService.Controllers
                     Data = mappings
                 });
             }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
             catch (Exception ex)
             {
                 return StatusCode(500, new { Message = ex.Message });
@@ -46,7 +50,7 @@ namespace MappingService.Controllers
 
         // GET api/mapping
         [HttpGet]
-          [Authorize]
+        [Authorize]
         public async Task<IActionResult> GetMappings()
         {
             try
@@ -60,6 +64,7 @@ namespace MappingService.Controllers
             }
         }
 
+        // DELETE api/mapping/{AssetId}
         [HttpDelete("{AssetId}")]
         [Authorize(Roles = "Admin,Engineer")]
         public async Task<IActionResult> UnAssignDevicesFromAsset(Guid AssetId)
@@ -67,43 +72,63 @@ namespace MappingService.Controllers
             try
             {
                 await _mappingService.UnassignDevice(AssetId);
-                return Ok("Device Disconnected Successfully");
-            }catch(Exception ex)
+                return Ok(new { Message = "Device disconnected successfully" });
+            }
+            catch (Exception ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest(new { Message = ex.Message });
             }
         }
 
-        [HttpGet("{assetId}")]
+        // GET api/mapping/{assetId}
+        [HttpGet("mappings/{assetId}")]
         [Authorize]
-        public async Task<IActionResult> GetConfigOnAsset(Guid assetId)
+        public async Task<IActionResult> GetMappingsOnAsset(Guid assetId)
         {
             try
             {
                 var mappingonasset = await _mappingService.GetSignalsOnAnAsset(assetId);
                 return Ok(mappingonasset);
-            }catch(Exception ex)
+            }
+            catch (Exception ex)
             {
-                throw new Exception(ex.Message);
+                return StatusCode(500, new { Message = ex.Message });
             }
         }
+
+        // GET api/mapping/signals/{assetId}
+        [HttpGet("signals/{assetId}")]
+        [Authorize]
+        public async Task<IActionResult> GetSignalsByAsset(Guid assetId)
+        {
+            try
+            {
+                var signals = await _mappingService.GetSignalsByAsset(assetId);
+                return Ok(signals);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { Message = ex.Message });
+            }
+        }
+
+        // DELETE api/deletemap/{mappingId}
         [HttpDelete("/api/deletemap/{mappingId}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteMappingAsync(Guid mappingId)
         {
             try
             {
-                bool                                        deleted = await _mappingService.DeleteMappingAsync(mappingId);
+                bool deleted = await _mappingService.DeleteMappingAsync(mappingId);
 
                 if (!deleted)
-                    return NotFound(new { message = "Mapping not found." });
+                    return NotFound(new { Message = "Mapping not found." });
 
-                return Ok(new { message = "Mapping deleted successfully." });
+                return Ok(new { Message = "Mapping deleted successfully." });
             }
             catch (Exception ex)
             {
-
-                return StatusCode(500, new { message = "Internal server error while deleting mapping." });
+                return StatusCode(500, new { Message = "Internal server error while deleting mapping." });
             }
         }
     }

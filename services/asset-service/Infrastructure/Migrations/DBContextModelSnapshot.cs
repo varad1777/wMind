@@ -51,16 +51,16 @@ namespace Infrastructure.Migrations
                     b.Property<bool>("IsAnalyzed")
                         .HasColumnType("bit");
 
-                    b.Property<Guid>("MappingId")
+                    b.Property<Guid?>("MappingId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<double?>("MaxObservedValue")
+                    b.Property<double>("MaxObservedValue")
                         .HasColumnType("float");
 
                     b.Property<double>("MaxThreshold")
                         .HasColumnType("float");
 
-                    b.Property<double?>("MinObservedValue")
+                    b.Property<double>("MinObservedValue")
                         .HasColumnType("float");
 
                     b.Property<double>("MinThreshold")
@@ -68,6 +68,9 @@ namespace Infrastructure.Migrations
 
                     b.Property<int>("ReminderTimeHours")
                         .HasColumnType("int");
+
+                    b.Property<Guid>("SignalId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("SignalName")
                         .IsRequired()
@@ -82,9 +85,14 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("AlertId");
 
-                    b.HasIndex("MappingId");
+                    b.HasIndex("AlertStartUtc");
 
                     b.HasIndex("AssetId", "IsAnalyzed");
+
+                    b.HasIndex("MappingId", "IsActive");
+
+                    b.HasIndex("SignalId", "IsActive")
+                        .HasDatabaseName("IX_Alert_Signal_Active");
 
                     b.ToTable("Alerts");
                 });
@@ -301,12 +309,17 @@ namespace Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<Guid>("SignalTypeId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Unit")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
                     b.HasKey("SignalId");
+
+                    b.HasIndex("SignalTypeId");
 
                     b.HasIndex("AssetId", "DeviceId", "SignalKey")
                         .IsUnique()
@@ -498,6 +511,17 @@ namespace Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Notification");
+                });
+
+            modelBuilder.Entity("Domain.Entities.Signal", b =>
+                {
+                    b.HasOne("Domain.Entities.SignalTypes", "SignalType")
+                        .WithMany()
+                        .HasForeignKey("SignalTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SignalType");
                 });
 
             modelBuilder.Entity("Domain.Entities.Asset", b =>

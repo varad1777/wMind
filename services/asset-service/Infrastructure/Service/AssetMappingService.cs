@@ -1,5 +1,8 @@
 ﻿using Application.Interface;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using MappingService.Domain.Entities;
 using MappingService.DTOs;
 using Infrastructure.DBs;
@@ -18,88 +21,92 @@ namespace Infrastructure.Services
             _db = db;
         }
 
-
-
         public async Task<List<AssetSignalDeviceMapping>> CreateMapping(CreateMappingDto dto)
         {
             if (dto == null) throw new ArgumentNullException(nameof(dto));
             if (dto.Registers == null || !dto.Registers.Any())
                 throw new InvalidOperationException("No registers selected for mapping.");
 
-            // normalize requested lists
             var requestedSignalIds = dto.Registers.Select(r => r.SignalTypeId).Distinct().ToList();
             var requestedRegisterAddresses = dto.Registers.Select(r => r.RegisterAddress).ToList();
             var requestedRegisterIds = dto.Registers.Select(r => r.registerId).ToList();
 
-            // Start a transaction to ensure atomicity
             await using var tx = await _db.Database.BeginTransactionAsync();
 
             try
             {
-                // load asset configurations (full objects so we can read SignalTypeID, SignalName, etc.)
                 var assetSignals = await _db.AssetConfigurations
-                            .Where(x => x.AssetId == dto.AssetId)
-                            .Select(x => x.SignalType)
-                            .ToListAsync();
+                    .Where(ac => ac.AssetId == dto.AssetId)
+                    .Select(ac => ac.SignalType)
+                    .ToListAsync();
 
                 if (!assetSignals.Any())
                     throw new InvalidOperationException("No signals found for this asset.");
 
-                // ensure requested signal ids belong to this asset
                 var assetSignalIds = assetSignals.Select(s => s.SignalTypeID).ToHashSet();
                 var invalidSignals = requestedSignalIds.Where(id => !assetSignalIds.Contains(id)).ToList();
                 if (invalidSignals.Any())
                     throw new InvalidOperationException($"Requested signal(s) not found on asset: {string.Join(", ", invalidSignals)}");
 
-                // Ensure the asset does not already have mapping(s) for any requested signal
-                var existingMappingsForAssetSignals = await _db.MappingTable
+                var existingMappings = await _db.MappingTable
                     .Where(m => m.AssetId == dto.AssetId && requestedSignalIds.Contains(m.SignalTypeId))
                     .ToListAsync();
 
-                if (existingMappingsForAssetSignals.Any())
+                if (existingMappings.Any())
                 {
-                    var existingNames = existingMappingsForAssetSignals
-                        .Select(m => m.SignalName ?? m.SignalTypeId.ToString())
-                        .Distinct();
-
+                    var existingNames = existingMappings.Select(m => m.SignalName ?? m.SignalTypeId.ToString()).Distinct();
                     throw new InvalidOperationException($"Asset already has mapping(s) for signal(s): {string.Join(", ", existingNames)}");
                 }
 
-                // Ensure requested register addresses are not already used on the same device port
-                var existingRegisterConflicts = await _db.MappingTable
-                    .Where(m => m.DeviceId == dto.DeviceId
-                             && m.DevicePortId == dto.DevicePortId
-                             && requestedRegisterAddresses.Contains(m.RegisterAdress))
+                var registerConflicts = await _db.MappingTable
+                    .Where(m => m.DeviceId == dto.DeviceId && m.DevicePortId == dto.DevicePortId && requestedRegisterAddresses.Contains(m.RegisterAdress))
                     .ToListAsync();
 
-                if (existingRegisterConflicts.Any())
+                if (registerConflicts.Any())
                 {
-                    var usedAddresses = existingRegisterConflicts.Select(m => m.RegisterAdress.ToString()).Distinct();
+                    var usedAddresses = registerConflicts.Select(m => m.RegisterAdress.ToString()).Distinct();
                     throw new InvalidOperationException($"Register(s) already in use on this device port: {string.Join(", ", usedAddresses)}");
                 }
 
-                // Build mapping objects
                 var mappings = new List<AssetSignalDeviceMapping>();
+                var signals = new List<Signal>();
+
                 foreach (var reg in dto.Registers)
                 {
-                    // find the asset signal object to copy metadata
-                    var signal = assetSignals.First(s => s.SignalTypeID == reg.SignalTypeId);
+                    var signalType = assetSignals.First(s => s.SignalTypeID == reg.SignalTypeId);
 
-                    mappings.Add(new AssetSignalDeviceMapping
+                    var mapping = new AssetSignalDeviceMapping
                     {
                         AssetId = dto.AssetId,
-                        SignalTypeId = signal.SignalTypeID,
+                        SignalTypeId = signalType.SignalTypeID,
                         DeviceId = dto.DeviceId,
                         DevicePortId = dto.DevicePortId,
                         RegisterAdress = reg.RegisterAddress,
                         registerId = reg.registerId,
-                        SignalName = signal.SignalName,
-                        SignalUnit = signal.SignalUnit,
+                        SignalName = signalType.SignalName,
+                        SignalUnit = signalType.SignalUnit,
                         CreatedAt = DateTime.UtcNow
-                    });
+                    };
+                    mappings.Add(mapping);
+
+            var signal = new Signal
+            {
+                SignalId = Guid.NewGuid(),
+                SignalKey = $"{dto.AssetId}.{dto.DeviceId}.{signalType.SignalName}",
+                AssetId = dto.AssetId,
+                DeviceId = dto.DeviceId,
+                SignalTypeId = signalType.SignalTypeID, 
+                SignalName = signalType.SignalName,
+                Unit = signalType.SignalUnit,
+                CreatedAt = DateTime.UtcNow
+            };
+
+
+                    signals.Add(signal);
                 }
 
                 _db.MappingTable.AddRange(mappings);
+                _db.Signals.AddRange(signals);
                 await _db.SaveChangesAsync();
 
                 await tx.CommitAsync();
@@ -113,8 +120,6 @@ namespace Infrastructure.Services
             }
         }
 
-
-
         public async Task<List<AssetSignalDeviceMapping>> GetMappings()
         {
             return await _db.MappingTable.ToListAsync();
@@ -122,24 +127,40 @@ namespace Infrastructure.Services
 
         public async Task UnassignDevice(Guid assetId)
         {
+            await using var tx = await _db.Database.BeginTransactionAsync();
+
             try
             {
                 var assetExists = await _db.Assets.AnyAsync(a => a.AssetId == assetId);
                 if (!assetExists)
-                    throw new Exception("Asset Not Found");
+                    throw new Exception("Asset not found.");
 
                 var mappings = await _db.MappingTable
-                                       .Where(m => m.AssetId == assetId)
-                                       .ToListAsync();
+                                        .Where(m => m.AssetId == assetId)
+                                        .ToListAsync();
 
-                if (mappings.Count == 0)
-                    throw new Exception("No device mapped to this asset");
+                if (!mappings.Any())
+                    throw new Exception("No device mapped to this asset.");
+
+                var deviceIds = mappings.Select(m => m.DeviceId).Distinct().ToList();
+
+                var signalsToDelete = await _db.Signals
+                    .Where(s => s.AssetId == assetId && deviceIds.Contains(s.DeviceId))
+                    .ToListAsync();
+
+                if (signalsToDelete.Any())
+                {
+                    _db.Signals.RemoveRange(signalsToDelete);
+                }
 
                 _db.MappingTable.RemoveRange(mappings);
+
                 await _db.SaveChangesAsync();
+                await tx.CommitAsync();
             }
             catch (Exception ex)
             {
+                await tx.RollbackAsync();
                 throw new Exception($"Error while unassigning device: {ex.Message}", ex);
             }
         }
@@ -188,7 +209,20 @@ namespace Infrastructure.Services
             }
         }
 
+        public async Task<List<Signal>> GetSignalsByAsset(Guid assetId)
+        {
+            try
+            {
+                var signals = await _db.Signals
+                    .Where(s => s.AssetId == assetId)
+                    .ToListAsync();
 
-
+                return signals;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Error while fetching signals for asset", ex);
+            }
+        }
     }
 }

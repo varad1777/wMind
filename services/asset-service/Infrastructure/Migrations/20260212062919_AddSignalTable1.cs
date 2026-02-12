@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class AddSignalTable1 : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -37,13 +37,14 @@ namespace Infrastructure.Migrations
                     AssetName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
                     SignalTypeId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     SignalName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    MappingId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    SignalId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    MappingId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
                     AlertStartUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
                     AlertEndUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
                     MinThreshold = table.Column<double>(type: "float", nullable: false),
                     MaxThreshold = table.Column<double>(type: "float", nullable: false),
-                    MinObservedValue = table.Column<double>(type: "float", nullable: true),
-                    MaxObservedValue = table.Column<double>(type: "float", nullable: true),
+                    MinObservedValue = table.Column<double>(type: "float", nullable: false),
+                    MaxObservedValue = table.Column<double>(type: "float", nullable: false),
                     ReminderTimeHours = table.Column<int>(type: "int", nullable: false),
                     IsActive = table.Column<bool>(type: "bit", nullable: false),
                     IsAnalyzed = table.Column<bool>(type: "bit", nullable: false),
@@ -221,15 +222,49 @@ namespace Infrastructure.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "Signals",
+                columns: table => new
+                {
+                    SignalId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    SignalKey = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
+                    AssetId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    DeviceId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    SignalName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    Unit = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    SignalTypeId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Signals", x => x.SignalId);
+                    table.ForeignKey(
+                        name: "FK_Signals_SignalTypes_SignalTypeId",
+                        column: x => x.SignalTypeId,
+                        principalTable: "SignalTypes",
+                        principalColumn: "SignalTypeID",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Alert_Signal_Active",
+                table: "Alerts",
+                columns: new[] { "SignalId", "IsActive" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Alerts_AlertStartUtc",
+                table: "Alerts",
+                column: "AlertStartUtc");
+
             migrationBuilder.CreateIndex(
                 name: "IX_Alerts_AssetId_IsAnalyzed",
                 table: "Alerts",
                 columns: new[] { "AssetId", "IsAnalyzed" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Alerts_MappingId",
+                name: "IX_Alerts_MappingId_IsActive",
                 table: "Alerts",
-                column: "MappingId");
+                columns: new[] { "MappingId", "IsActive" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_AssetConfigurations_AssetId_SignaTypeID",
@@ -293,6 +328,17 @@ namespace Infrastructure.Migrations
                 table: "SignalData",
                 columns: new[] { "AssetId", "SignalTypeId", "DeviceId", "DevicePortId", "BucketStartUtc" },
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Signals_SignalTypeId",
+                table: "Signals",
+                column: "SignalTypeId");
+
+            migrationBuilder.CreateIndex(
+                name: "UX_Signal_AssetDeviceKey",
+                table: "Signals",
+                columns: new[] { "AssetId", "DeviceId", "SignalKey" },
+                unique: true);
         }
 
         /// <inheritdoc />
@@ -320,13 +366,16 @@ namespace Infrastructure.Migrations
                 name: "SignalData");
 
             migrationBuilder.DropTable(
+                name: "Signals");
+
+            migrationBuilder.DropTable(
                 name: "Assets");
 
             migrationBuilder.DropTable(
-                name: "SignalTypes");
+                name: "Notifications");
 
             migrationBuilder.DropTable(
-                name: "Notifications");
+                name: "SignalTypes");
         }
     }
 }
