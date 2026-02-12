@@ -36,6 +36,8 @@ namespace MyApp.Application.Dtos
     public class DeviceRegisterDto
     {
         public Guid RegisterId { get; set; }
+
+        public Guid? SignalId { get; set; }
         public int RegisterAddress { get; set; }
         public int RegisterLength { get; set; }
         public string DataType { get; set; } = string.Empty;

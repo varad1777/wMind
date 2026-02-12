@@ -20,6 +20,7 @@ namespace MyApp.Infrastructure.Services
             _db = db;
             _log = log;
             _assetDb = assetDb;
+
         }
 
         public async Task<Guid> CreateDeviceAsync(
@@ -176,7 +177,7 @@ namespace MyApp.Infrastructure.Services
         }
 
 
-        public async Task UpdateDeviceAsync(Guid deviceId, UpdateDeviceDto dto,DeviceConfigurationDto? configDto = null, CancellationToken ct = default)
+        public async Task UpdateDeviceAsync(Guid deviceId, UpdateDeviceDto dto, DeviceConfigurationDto? configDto = null, CancellationToken ct = default)
         {
             var device = await _db.Devices
                 .FirstOrDefaultAsync(d => d.DeviceId == deviceId, ct);
@@ -503,7 +504,7 @@ namespace MyApp.Infrastructure.Services
                 deviceId);
         }
 
-        public async Task<Guid> AddConfigurationAsync(Guid deviceId,DeviceConfigurationDto dto,CancellationToken ct = default)
+        public async Task<Guid> AddConfigurationAsync(Guid deviceId, DeviceConfigurationDto dto, CancellationToken ct = default)
         {
             if (dto == null)
                 throw new ArgumentNullException(nameof(dto));
@@ -1070,150 +1071,130 @@ namespace MyApp.Infrastructure.Services
 
 
         public async Task<List<DeviceConfigurationResponseDto>> GetDeviceConfigurationsByGatewayAsync(
-        string gatewayId,
-        CancellationToken ct = default)
+    string gatewayId,
+    CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(gatewayId))
-                throw new ArgumentException(
-                    "GatewayId cannot be empty.",
-                    nameof(gatewayId));
+                throw new ArgumentException("GatewayId cannot be empty.", nameof(gatewayId));
 
-            // STEP 1: Get devices for this gateway
-            var gatewayDeviceIds =
-                await _db.Devices.AsNoTracking()
-                    .Where(d => d.GatewayId == gatewayId && !d.IsDeleted)
-                    .Select(d => d.DeviceId)
-                    .ToListAsync(ct);
+            // STEP 1: Get devices for gateway
+            var gatewayDeviceIds = await _db.Devices.AsNoTracking()
+                .Where(d => d.GatewayId == gatewayId && !d.IsDeleted)
+                .Select(d => d.DeviceId)
+                .ToListAsync(ct);
 
             if (!gatewayDeviceIds.Any())
-                throw new KeyNotFoundException(
-                    $"No gateway found with GatewayId '{gatewayId}'.");
+                throw new KeyNotFoundException($"No gateway found with GatewayId '{gatewayId}'.");
 
-            // STEP 2: Get mapping info
-            var mappings =
-                await _assetDb.MappingTable.AsNoTracking()
-                    .Where(m => gatewayDeviceIds.Contains(m.DeviceId))
-                    .Select(m => new { m.DeviceId, RegisterId = m.registerId })
-                    .ToListAsync(ct);
+            // STEP 2: Join MappingTable + Signals using DeviceId + AssetId + SignalName
+            var mappingsWithSignal =
+                await (from m in _assetDb.MappingTable.AsNoTracking()
+                       join s in _assetDb.Signals.AsNoTracking()
+                           on new { m.DeviceId, m.AssetId, m.SignalName }
+                           equals new { s.DeviceId, s.AssetId, s.SignalName }
+                       where gatewayDeviceIds.Contains(m.DeviceId)
+                       select new
+                       {
+                           m.DeviceId,
+                           m.registerId,
+                           m.AssetId,
+                           m.SignalName,
+                           s.SignalId
+                       })
+                .ToListAsync(ct);
 
-            if (!mappings.Any())
+            if (!mappingsWithSignal.Any())
                 return new List<DeviceConfigurationResponseDto>();
 
-            var mappedDeviceIds =
-                mappings.Select(m => m.DeviceId).Distinct().ToList();
+            var mappedDeviceIds = mappingsWithSignal
+                .Select(m => m.DeviceId)
+                .Distinct()
+                .ToList();
 
             // STEP 3: Load devices + configuration + slaves + registers
-            var devices =
-                await _db.Devices.AsNoTracking()
-                    .Where(d => mappedDeviceIds.Contains(d.DeviceId) && !d.IsDeleted)
-                    .Include(d => d.DeviceConfiguration)
-                    .Include(d => d.DeviceSlave)
-                        .ThenInclude(s => s.Registers)
-                    .ToListAsync(ct);
+            var devices = await _db.Devices.AsNoTracking()
+                .Where(d => mappedDeviceIds.Contains(d.DeviceId) && !d.IsDeleted)
+                .Include(d => d.DeviceConfiguration)
+                .Include(d => d.DeviceSlave)
+                    .ThenInclude(s => s.Registers)
+                .ToListAsync(ct);
 
             if (!devices.Any())
                 return new List<DeviceConfigurationResponseDto>();
 
-            // STEP 4: Build lookup for mapped registers
-            var mappedRegistersByDevice =
-                mappings.GroupBy(m => m.DeviceId)
-                    .ToDictionary(
-                        g => g.Key,
-                        g => g.Select(x => x.RegisterId).ToHashSet());
+            // STEP 4: Build lookup (DeviceId → registerId → SignalId)
+            var mappingLookup = mappingsWithSignal
+                .GroupBy(m => m.DeviceId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.ToDictionary(x => x.registerId, x => x.SignalId)
+                );
 
             // STEP 5: Build response
-            var result =
-                devices.Select(device =>
+            var result = devices.Select(device =>
+            {
+                var cfg = device.DeviceConfiguration;
+
+                return new DeviceConfigurationResponseDto
                 {
-                    var cfg = device.DeviceConfiguration;
+                    DeviceId = device.DeviceId,
+                    Name = device.Name,
+                    Protocol = device.Protocol,
 
-                    return new DeviceConfigurationResponseDto
-                    {
-                        DeviceId = device.DeviceId,
-                        Name = device.Name,
-                        Protocol = device.Protocol, // device-level protocol (kept)
-
-                        // ---------- Polling ----------
-                        PollIntervalMs =
-                            cfg == null ? null :
-                            cfg.Protocol == DeviceProtocol.Modbus
-                                ? cfg.PollIntervalMs ?? 1000
-                                : cfg.ConnectionMode == OpcUaConnectionMode.Polling
-                                    ? cfg.PollIntervalMs
-                                    : null,
-
-                        // ---------- MODBUS ONLY ----------
-                        IpAddress =
-                            cfg?.Protocol == DeviceProtocol.Modbus
-                                ? cfg.IpAddress
+                    PollIntervalMs =
+                        cfg == null ? null :
+                        cfg.Protocol == DeviceProtocol.Modbus
+                            ? cfg.PollIntervalMs ?? 1000
+                            : cfg.ConnectionMode == OpcUaConnectionMode.Polling
+                                ? cfg.PollIntervalMs
                                 : null,
 
-                        Port =
-                            cfg?.Protocol == DeviceProtocol.Modbus
-                                ? cfg.Port
-                                : null,
+                    IpAddress = cfg?.Protocol == DeviceProtocol.Modbus ? cfg.IpAddress : null,
+                    Port = cfg?.Protocol == DeviceProtocol.Modbus ? cfg.Port : null,
+                    SlaveId = cfg?.Protocol == DeviceProtocol.Modbus ? cfg.SlaveId : null,
+                    Endian = cfg?.Protocol == DeviceProtocol.Modbus ? cfg.Endian : null,
 
-                        SlaveId =
-                            cfg?.Protocol == DeviceProtocol.Modbus && cfg.SlaveId.HasValue
-                                ? (byte)cfg.SlaveId.Value
-                                : (byte?)null,
+                    ConnectionString = cfg?.Protocol == DeviceProtocol.OpcUa ? cfg.ConnectionString : null,
+                    ConnectionMode = cfg?.Protocol == DeviceProtocol.OpcUa ? cfg.ConnectionMode : null,
 
-                        Endian =
-                            cfg?.Protocol == DeviceProtocol.Modbus
-                                ? cfg.Endian
-                                : null,
+                    Slaves = device.DeviceSlave
+                        .Where(s => s.IsHealthy)
+                        .Select(s => new SlaveDto
+                        {
+                            DeviceSlaveId = s.deviceSlaveId,
+                            SlaveIndex = s.slaveIndex,
+                            IsHealthy = s.IsHealthy,
 
-                        // ---------- OPC UA ----------
-                        ConnectionString =
-                            cfg?.Protocol == DeviceProtocol.OpcUa
-                                ? cfg.ConnectionString
-                                : null,
-
-                        ConnectionMode =
-                            cfg?.Protocol == DeviceProtocol.OpcUa
-                                ? cfg.ConnectionMode
-                                : null,
-
-                        Slaves =
-                            device.DeviceSlave
-                                .Where(s => s.IsHealthy)
-                                .Select(s => new SlaveDto
+                            Registers = s.Registers
+                                .Where(r =>
+                                    r.IsHealthy &&
+                                    mappingLookup.ContainsKey(device.DeviceId) &&
+                                    mappingLookup[device.DeviceId].ContainsKey(r.RegisterId))
+                                .OrderBy(r => r.RegisterAddress)
+                                .Select(r => new DeviceRegisterDto
                                 {
-                                    DeviceSlaveId = s.deviceSlaveId,
-                                    SlaveIndex = s.slaveIndex,
-                                    IsHealthy = s.IsHealthy,
+                                    RegisterId = r.RegisterId,
+                                    RegisterAddress = r.RegisterAddress,
+                                    RegisterLength = r.RegisterLength,
+                                    DataType = r.DataType,
+                                    Scale = r.Scale,
+                                    Unit = r.Unit,
+                                    ByteOrder = r.ByteOrder,
+                                    WordSwap = r.WordSwap,
+                                    IsHealthy = r.IsHealthy,
 
-                                    Registers =
-                                        s.Registers
-                                            .Where(r =>
-                                                r.IsHealthy &&
-                                                mappedRegistersByDevice.TryGetValue(
-                                                    device.DeviceId,
-                                                    out var registerIds) &&
-                                                registerIds.Contains(r.RegisterId))
-                                            .OrderBy(r => r.RegisterAddress)
-                                            .Select(r => new DeviceRegisterDto
-                                            {
-                                                RegisterId = r.RegisterId,
-                                                RegisterAddress = r.RegisterAddress,
-                                                RegisterLength = r.RegisterLength,
-                                                DataType = r.DataType,
-                                                Scale = r.Scale,
-                                                Unit = r.Unit,
-                                                ByteOrder = r.ByteOrder,
-                                                WordSwap = r.WordSwap,
-                                                IsHealthy = r.IsHealthy
-                                            })
-                                            .ToList()
+                                    // 🔥 SignalId from lookup
+                                    SignalId = mappingLookup[device.DeviceId][r.RegisterId]
                                 })
                                 .ToList()
-                    };
-                })
-                .ToList();
+                        })
+                        .ToList()
+                };
+            }).ToList();
 
             return result;
-
         }
+
     }
 
 }
