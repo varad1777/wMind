@@ -4,7 +4,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-// Using in-repo ModbusTcpClient helper instead of external NModbus4 package
 using MyApp.Application.Dtos;
 using MyApp.Domain.Entities;
 using MyApp.Infrastructure.Data;
@@ -15,22 +14,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Net;
-
-using MyApp.Infrastructure.Services; // For ISignalLookupService
+using MyApp.Infrastructure.Services; 
 
 namespace MyApp.Infrastructure.Services
 {
-    /// <summary>
-    /// Background service that polls Modbus TCP devices and sends telemetry via SignalR.
-    /// This class preserves your original behavior: grouping ranges, float fallback,
-    /// failure counting and marking ports unhealthy, console buffered printing, and
-    /// NOT saving telemetry to the DB (only push via SignalR).
-    /// Additionally it bounds concurrent device connections using _semaphore.
-    /// </summary>
+    
     public class ModbusPollerHostedService : BackgroundService
     {
         private readonly IServiceProvider _sp;
@@ -39,15 +29,11 @@ namespace MyApp.Infrastructure.Services
         private readonly IHubContext<ModbusHub> _hub;
         private readonly RabbitMqService _rabbit;
 
-        // Semaphore to limit concurrent TCP connections / modbus polls
-        // value loaded from config or default 10
         private readonly SemaphoreSlim _semaphore;
 
-        // failure counters and console lock (shared)
         private static readonly ConcurrentDictionary<Guid, int> _failureCounts = new();
         private static readonly object _consoleLock = new();
 
-        // per-device loop tasks
         private readonly ConcurrentDictionary<Guid, Task> _deviceTasks = new();
 
         private readonly int _failThreshold;
@@ -62,7 +48,6 @@ namespace MyApp.Infrastructure.Services
             _config = config;
             _hub = hub ?? throw new ArgumentNullException(nameof(hub));
 
-            // read failure threshold and concurrency limit from configuration
             _failThreshold = config?.GetValue<int?>("Modbus:FailureThreshold") ?? 3;
             if (_failThreshold <= 0) _failThreshold = 3;
 
@@ -85,24 +70,19 @@ namespace MyApp.Infrastructure.Services
                         using var scope = _sp.CreateScope();
                         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-                        // load current device ids
                         var deviceIds = await db.Devices
-                                          .AsNoTracking()
-                                          .Where(d => !d.IsDeleted && d.Protocol == DeviceProtocol.Modbus)
-                                          .Select(d => d.DeviceId)
-                                          .ToListAsync(stoppingToken);
+                            .AsNoTracking()
+                            .Where(d => !d.IsDeleted)
+                            .Select(d => d.DeviceId)
+                            .ToListAsync(stoppingToken);
 
-
-                        // start a long-running loop task for each device if not already running
                         foreach (var id in deviceIds)
                         {
                             if (_deviceTasks.ContainsKey(id)) continue;
 
-                            // fire-and-forget long running loop for the device
                             var task = Task.Run(() => PollLoopForDeviceAsync(id, stoppingToken), stoppingToken);
                             _deviceTasks.TryAdd(id, task);
 
-                            // cleanup completed tasks (non-blocking)
                             var completed = _deviceTasks.Where(kvp => kvp.Value.IsCompleted).Select(kvp => kvp.Key).ToList();
                             foreach (var k in completed) _deviceTasks.TryRemove(k, out _);
                         }
@@ -118,7 +98,6 @@ namespace MyApp.Infrastructure.Services
             }
             finally
             {
-                // attempt graceful shutdown of device loops
                 try
                 {
                     await Task.WhenAll(_deviceTasks.Values.ToArray());
@@ -130,9 +109,7 @@ namespace MyApp.Infrastructure.Services
             }
         }
 
-        /// <summary>
-        /// Per-device loop. Calls PollSingleDeviceOnceAsync repeatedly and delays based on returned poll interval.
-        /// </summary>
+        
         private async Task PollLoopForDeviceAsync(Guid deviceId, CancellationToken ct)
         {
             while (!ct.IsCancellationRequested)
@@ -151,7 +128,6 @@ namespace MyApp.Infrastructure.Services
                     catch (Exception ex)
                     {
                         _log.LogError(ex, "Unhandled error during single poll for device {Device}", deviceId);
-                        // small backoff to avoid tight crash loop
                         delayMs = 1000;
                     }
 
@@ -165,24 +141,12 @@ namespace MyApp.Infrastructure.Services
                 catch (Exception ex)
                 {
                     _log.LogError(ex, "Error in device loop for {Device}", deviceId);
-                    // back off on unexpected loop-level error
                     await Task.Delay(TimeSpan.FromSeconds(1), ct);
                 }
             }
         }
 
-        /// <summary>
-        /// Performs a single poll for the given device and returns the device's poll interval in milliseconds.
-        /// All original behaviors are preserved:
-        /// - parse ProtocolSettingsJson,
-        /// - normalize addresses,
-        /// - group ranges up to 125 registers,
-        /// - decode float32 + fallback,
-        /// - failure counting and marking unhealthy ports (DB update),
-        /// - buffered console output (atomic),
-        /// - send telemetry via SignalR only (no DB save).
-        /// Additionally this method uses _semaphore to bound concurrency around the network I/O.
-        /// </summary>
+        
         private async Task<int> PollSingleDeviceOnceAsync(Guid deviceId, CancellationToken ct)
         {
             using var scope = _sp.CreateScope();
@@ -191,96 +155,69 @@ namespace MyApp.Infrastructure.Services
             var device = await db.Devices.Include(d => d.DeviceConfiguration).FirstOrDefaultAsync(d => d.DeviceId == deviceId, ct);
             if (device == null)
             {
-                // _log.LogDebug("Device {DeviceId} not found - skipping", deviceId);
                 return 1000; // safe default
             }
 
             if (device.IsDeleted)
             {
-                // _log.LogInformation("Device {DeviceId} is soft-deleted - stopping polling", deviceId);
                 return 1000;
             }
 
             if (device.DeviceConfigurationId == null)
             {
-                // _log.LogDebug("Device {DeviceId} has no configuration - skipping", device.DeviceId);
                 return 1000;
             }
 
             var cfg = device.DeviceConfiguration!;
-            var pollIntervalMs = cfg.PollIntervalMs ?? 1000;
-            // _log.LogInformation("Polling device {DeviceId} using config {CfgId}", device.DeviceId, cfg.ConfigurationId);
-            if (cfg.Protocol != DeviceProtocol.Modbus)
-            {
-                _log.LogWarning(
-                    "Device {DeviceId} has non-Modbus configuration attached to Modbus poller",
-                    device.DeviceId);
-
-                return pollIntervalMs;
-            }
-
-
+            
             var ip = cfg.IpAddress;
-            int port = cfg.Port ?? 502;
-            int slaveIdFromConfig = cfg.SlaveId ?? 1;
-
+            var port = cfg.Port ?? 502;
+            var slaveIdFromConfig = cfg.SlaveId ?? 1;
             var endian = cfg.Endian ?? "Big";
-
-
-            var addressStyleCfg = "ZeroBased";
-
+            var pollIntervalMs = cfg.PollIntervalMs ?? 1000;
 
             if (string.IsNullOrEmpty(ip))
             {
-                // _log.LogWarning("Device {DeviceId} ProtocolSettingsJson missing IpAddress. Config: {CfgId}. Skipping poll.", device.DeviceId, cfg.ConfigurationId);
                 return pollIntervalMs;
             }
 
-            // Load device slaves and their registers. Only include slaves that belong to the device
-            // and are not soft-deleted; register-level health is used to filter which registers to poll.
             var slaves = await db.DeviceSlaves
                 .Include(ds => ds.Registers)
                 .Where(s => s.DeviceId == device.DeviceId && s.IsHealthy)
                 .ToListAsync(ct);
 
-            // Flatten registers from slaves; skip slaves without any healthy registers
             var activeRegisters = slaves
                 .SelectMany(ds => ds.Registers.Where(r => r.IsHealthy).Select(r => new { DeviceSlave = ds, Register = r }))
                 .ToList();
 
-            _log.LogWarning(
-     "No healthy registers for device {Device}. Ip={Ip} Port={Port} SlaveId={SlaveId} Endian={Endian}",
-     device.DeviceId,
-     ip,
-     port,
-     cfg.SlaveId,
-     cfg.Endian
- );
-
+            if (!activeRegisters.Any())
+            {
+                _log.LogWarning("No healthy registers for device {Device}. Ip={Ip} Port={Port}", device.DeviceId, ip, port);
+                return pollIntervalMs;
+            }
 
             const int ModbusMaxRegistersPerRead = 125;
 
-            bool dbUses40001 = false;
-            // checking address style, if 1-based or zero-based
-            if (!string.IsNullOrEmpty(addressStyleCfg))
-                dbUses40001 = string.Equals(addressStyleCfg, "40001", StringComparison.OrdinalIgnoreCase);
-            else
-                dbUses40001 = slaves.Any(s => s.Registers != null && s.Registers.Any(r => r.RegisterAddress >= 40001));
+            bool dbUses40001 = slaves.Any(s => s.Registers != null && s.Registers.Any(r => r.RegisterAddress >= 40001));
 
             int ToProto(int dbAddr)
             {
-                // modbus expects zero-based addresses; normalize
-                if (dbUses40001) return dbAddr - 40001;
-                if (dbAddr > 0 && dbAddr < 40001) return dbAddr - 1;
-                return dbAddr;
+                if (dbUses40001 && dbAddr >= 40001)
+                {
+                    return dbAddr - 40001;  
+                }
+                else if (dbAddr > 0 && dbAddr < 40001)
+                {
+                    return dbAddr - 1;  
+                }
+                return dbAddr;  
             }
 
-            // Map registers to protocol addresses and lengths (preserve link to DeviceSlave)
             var protoPorts = activeRegisters.Select(x => new
             {
                 DeviceSlave = x.DeviceSlave,
                 Register = x.Register,
-                ProtoAddr = ToProto(x.Register.RegisterAddress), // zero-based address
+                ProtoAddr = ToProto(x.Register.RegisterAddress), 
                 Length = Math.Max(1, x.Register.RegisterLength)
             })
             .OrderBy(x => x.ProtoAddr)
@@ -292,45 +229,28 @@ namespace MyApp.Infrastructure.Services
                 return pollIntervalMs;
             }
 
-            // Acquire semaphore to limit concurrent network connections/polls.
-            // This ensures we don't overload network/DB/CPU when many device loops run.
-           
-// Acquire semaphore to limit concurrent network connections/polls.
             await _semaphore.WaitAsync(ct);
             
             try
             {
-                // Connect to device TCP with a short timeout
                 using var tcp = new TcpClient();
                 using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, connectCts.Token);
 
-                if (!IPAddress.TryParse(ip, out var ipAddress))
-                {
-                    _log.LogWarning("Invalid IP address {Ip} for device {Device}", ip, device.DeviceId);
-                    return pollIntervalMs;
-                }
-
-                await tcp.ConnectAsync(ipAddress, port, linked.Token);
-
-
-                // Using in-repo ModbusTcpClient helper to avoid NModbus4 dependency
+                await tcp.ConnectAsync(ip, port, linked.Token);
 
                 var now = DateTime.UtcNow;
                 var allReads = new List<(Guid deviceSlaveId, int slaveIndex, string SignalType, double Value, string Unit, int RegisterAddress)>();
 
-                // --- Group protoPorts by slaveIndex (unit id) ---
                 var protoGroups = protoPorts
                     .GroupBy(x => ((DeviceSlave)x.DeviceSlave).slaveIndex)
                     .ToDictionary(g => g.Key, g => g.OrderBy(p => p.ProtoAddr).ToList());
 
-                // For each slave (unit id) build contiguous ranges and read separately
                 foreach (var kv in protoGroups)
                 {
                     int unitId = kv.Key;
                     var itemsForSlave = kv.Value;
 
-                    // Build ranges for this slave
                     var slaveRanges = new List<(int Start, int Count, List<dynamic> Items)>();
                     int j = 0;
                     while (j < itemsForSlave.Count)
@@ -362,7 +282,6 @@ namespace MyApp.Infrastructure.Services
                         slaveRanges.Add((start, count, items));
                     }
 
-                    // Perform reads for each range
                     foreach (var r in slaveRanges)
                     {
                         if (r.Start < 0 || r.Start > ushort.MaxValue) { _log.LogWarning("Skipping invalid start {Start}", r.Start); continue; }
@@ -388,7 +307,6 @@ namespace MyApp.Infrastructure.Services
                             sb.AppendLine($"Read {regs.Length} registers from unit={unitId} start={r.Start}");
                             sb.AppendLine(new string('-', 80));
 
-                            // Reset failure counts
                             foreach (var ent in r.Items)
                             {
                                 var reg = (Register)ent.Register;
@@ -398,7 +316,6 @@ namespace MyApp.Infrastructure.Services
                             sb.AppendLine($"{"Time (UTC)".PadRight(30)} | {"Unit".PadRight(6)} | {"Register".PadRight(8)} | {"Value".PadRight(15)} | {"Unit".PadRight(8)}");
                             sb.AppendLine(new string('-', 80));
 
-                            // Decode each register
                             foreach (var entry in r.Items)
                             {
                                 var ds = (DeviceSlave)entry.DeviceSlave;
@@ -470,7 +387,6 @@ namespace MyApp.Infrastructure.Services
                                         finalValue = regs[relativeIndex] * reg.Scale;
                                     }
 
-                                    // Add to telemetry buffer
                                     allReads.Add((ds.deviceSlaveId, ds.slaveIndex, reg.DataType ?? $"Port{ds.slaveIndex}", finalValue, reg.Unit ?? string.Empty, reg.RegisterAddress));
 
                                     sb.AppendLine($"{now:O}".PadRight(30) + " | " +
@@ -524,11 +440,7 @@ namespace MyApp.Infrastructure.Services
                         }
                     }
                 }
-                
 
-                // ═══════════════════════════════════════════════════════
-                // STEP 1: Get SignalId Lookup from Asset Database
-                // ═══════════════════════════════════════════════════════
                 if (allReads.Count > 0)
                 {
                     try
@@ -543,22 +455,19 @@ namespace MyApp.Infrastructure.Services
                             
                             if (signalLookup != null && signalLookup.Any())
                             {
-                                _log.LogDebug("✅ Loaded {Count} signal mappings for device {Device}", 
+                                _log.LogDebug("Loaded {Count} signal mappings for device {Device}", 
                                     signalLookup.Count, device.DeviceId);
                             }
                             else
                             {
-                                _log.LogDebug("⚠️  No signal mappings found for device {Device}", device.DeviceId);
+                                _log.LogDebug(" No signal mappings found for device {Device}", device.DeviceId);
                             }
                         }
                         catch (Exception ex)
                         {
-                            _log.LogWarning(ex, "❌ Could not load signal mappings for device {Device}", device.DeviceId);
+                            _log.LogWarning(ex, " Could not load signal mappings for device {Device}", device.DeviceId);
                         }
 
-                        // ═══════════════════════════════════════════════════════
-                        // STEP 2: Map Modbus Data to SignalIds
-                        // ═══════════════════════════════════════════════════════
                         var signalTelemetryList = new List<SignalTelemetryDto>();
                         int unmappedCount = 0;
 
@@ -583,35 +492,29 @@ namespace MyApp.Infrastructure.Services
 
                         if (unmappedCount > 0)
                         {
-                            _log.LogDebug("⚠️  {UnmappedCount} out of {TotalCount} registers have no signal mapping for device {Device}", 
+                            _log.LogDebug("  {UnmappedCount} out of {TotalCount} registers have no signal mapping for device {Device}", 
                                 unmappedCount, allReads.Count, device.DeviceId);
                         }
 
-                        // ═══════════════════════════════════════════════════════
-                        // STEP 3: Publish to RabbitMQ (NEW FORMAT: SignalId-based)
-                        // ═══════════════════════════════════════════════════════
                         if (signalTelemetryList.Any())
                         {
                             try
                             {
                                 foreach (var dto in signalTelemetryList)
                                 {
-                                    Console.WriteLine($"📤 Queue → SignalId: {dto.SignalId}, Value: {dto.Value}, Time: {dto.Timestamp:HH:mm:ss}");
+                                    Console.WriteLine($" Queue → SignalId: {dto.SignalId}, Value: {dto.Value}, Time: {dto.Timestamp:HH:mm:ss}");
                                     ct.ThrowIfCancellationRequested();
                                     await _rabbit.PublishAsync(dto, ct);
                                 }
                                 
-                                _log.LogInformation("✅ Published {Count} signal telemetry to RabbitMQ", signalTelemetryList.Count);
+                                _log.LogInformation(" Published {Count} signal telemetry to RabbitMQ", signalTelemetryList.Count);
                             }
                             catch (Exception rmqEx)
                             {
-                                _log.LogError(rmqEx, "❌ Failed to publish to RabbitMQ for device {Device}", device.DeviceId);
+                                _log.LogError(rmqEx, " Failed to publish to RabbitMQ for device {Device}", device.DeviceId);
                             }
                         }
 
-                        // ═══════════════════════════════════════════════════════
-                        // STEP 4: Send to SignalR (Keep old format)
-                        // ═══════════════════════════════════════════════════════
                         var telemetryDtos = allReads.Select(r => new TelemetryDto(
                             DeviceId: device.DeviceId,
                             deviceSlaveId: r.deviceSlaveId,
@@ -632,13 +535,13 @@ namespace MyApp.Infrastructure.Services
                             }
                             catch (Exception hubEx)
                             {
-                                _log.LogWarning(hubEx, "❌ Failed to push to SignalR for device {Device}", device.DeviceId);
+                                _log.LogWarning(hubEx, " Failed to push to SignalR for device {Device}", device.DeviceId);
                             }
                         }
                     }
                     catch (Exception ex)
                     {
-                        _log.LogError(ex, "❌ Failed to process telemetry for device {Device}", device.DeviceId);
+                        _log.LogError(ex, " Failed to process telemetry for device {Device}", device.DeviceId);
                     }
                 }
             }
@@ -660,18 +563,6 @@ namespace MyApp.Infrastructure.Services
             }
 
             return pollIntervalMs;
-        }
-
-        private static string? TryGetString(JsonDocument doc, string propName)
-        {
-            if (doc.RootElement.TryGetProperty(propName, out var v) && v.ValueKind == JsonValueKind.String) return v.GetString();
-            return null;
-        }
-
-        private static int TryGetInt(JsonDocument doc, string propName, int @default)
-        {
-            if (doc.RootElement.TryGetProperty(propName, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var x)) return x;
-            return @default;
         }
     }
 }

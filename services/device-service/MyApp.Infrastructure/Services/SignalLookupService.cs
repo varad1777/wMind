@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using MyApp.Infrastructure.Data;  // ✅ This imports AssetDbContextForDevice
+using MyApp.Infrastructure.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,10 +16,10 @@ namespace MyApp.Infrastructure.Services
 
     public class SignalLookupService : ISignalLookupService
     {
-        private readonly AssetDbContextForDevice _assetDb;  // ✅ Changed from AssetDbContext
+        private readonly AssetDbContextForDevice _assetDb;
         private readonly ILogger<SignalLookupService> _log;
 
-        public SignalLookupService(AssetDbContextForDevice assetDb, ILogger<SignalLookupService> log)  // ✅ Changed from AssetDbContext
+        public SignalLookupService(AssetDbContextForDevice assetDb, ILogger<SignalLookupService> log)
         {
             _assetDb = assetDb;
             _log = log;
@@ -37,12 +37,24 @@ namespace MyApp.Infrastructure.Services
                     where mapping.DeviceId == deviceId
                     select new
                     {
+                        // ⚠️  Using RegisterAdress (one 'd') to match entity typo
                         Key = $"{mapping.DeviceId}_{mapping.RegisterAdress}",
                         SignalId = signal.SignalId
                     }
                 ).ToDictionaryAsync(x => x.Key, x => x.SignalId, ct);
 
                 _log.LogDebug("Built signal lookup for device {DeviceId}: {Count} mappings", deviceId, lookup.Count);
+                
+                // 🔍 Optional: Log sample mappings for debugging
+                if (lookup.Any())
+                {
+                    var sample = lookup.Take(3);
+                    foreach (var kvp in sample)
+                    {
+                        _log.LogDebug("  Sample mapping: {Key} → {SignalId}", kvp.Key, kvp.Value);
+                    }
+                }
+                
                 return lookup;
             }
             catch (Exception ex)
