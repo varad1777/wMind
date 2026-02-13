@@ -46,5 +46,12 @@ namespace MyApp.Application.Interfaces
         Task<BulkCreateDeviceResultDto> CreateDevicesBulkAsync(BulkCreateDeviceDto request, CancellationToken ct = default);
         Task<List<DeviceConfigurationResponseDto>> GetDeviceConfigurationsByGatewayAsync(string gatewayId, CancellationToken ct = default);
 
+        // ✅ NEW: OPC UA Node Management
+        Task<Guid> AddOpcUaNodeAsync(Guid deviceId, CreateOpcUaNodeRequest request, CancellationToken ct = default);
+        Task<List<OpcUaNode>> GetOpcUaNodesByDeviceAsync(Guid deviceId, CancellationToken ct = default);
+        Task<OpcUaNode?> GetOpcUaNodeAsync(Guid nodeId, CancellationToken ct = default);
+        Task UpdateOpcUaNodeAsync(Guid nodeId, CreateOpcUaNodeRequest request, CancellationToken ct = default);
+        Task DeleteOpcUaNodeAsync(Guid nodeId, CancellationToken ct = default);
+
     }
 }

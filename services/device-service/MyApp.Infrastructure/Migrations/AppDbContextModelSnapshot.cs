@@ -179,6 +179,50 @@ namespace MyApp.Infrastructure.Migrations
                     b.ToTable("Gateway");
                 });
 
+            modelBuilder.Entity("MyApp.Domain.Entities.OpcUaNode", b =>
+                {
+                    b.Property<Guid>("OpcUaNodeId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DataType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid>("DeviceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("NodeId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<double>("ScalingFactor")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("float")
+                        .HasDefaultValue(1.0);
+
+                    b.Property<string>("SignalName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("OpcUaNodeId");
+
+                    b.HasIndex("DeviceId", "NodeId")
+                        .IsUnique();
+
+                    b.ToTable("OpcUaNodes");
+                });
+
             modelBuilder.Entity("MyApp.Domain.Entities.Register", b =>
                 {
                     b.Property<Guid>("RegisterId")
@@ -243,6 +287,17 @@ namespace MyApp.Infrastructure.Migrations
                     b.Navigation("Device");
                 });
 
+            modelBuilder.Entity("MyApp.Domain.Entities.OpcUaNode", b =>
+                {
+                    b.HasOne("MyApp.Domain.Entities.Device", "Device")
+                        .WithMany("OpcUaNodes")
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Device");
+                });
+
             modelBuilder.Entity("MyApp.Domain.Entities.Register", b =>
                 {
                     b.HasOne("MyApp.Domain.Entities.DeviceSlave", "DeviceSlave")
@@ -257,6 +312,8 @@ namespace MyApp.Infrastructure.Migrations
             modelBuilder.Entity("MyApp.Domain.Entities.Device", b =>
                 {
                     b.Navigation("DeviceSlave");
+
+                    b.Navigation("OpcUaNodes");
                 });
 
             modelBuilder.Entity("MyApp.Domain.Entities.DeviceSlave", b =>

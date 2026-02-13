@@ -32,6 +32,7 @@ namespace MyApp.Application.Dtos
         public string? Endian { get; set; }
 
         public List<SlaveDto> Slaves { get; set; } = new();
+        public List<OpcUaNodeDto> OpcUaNodes { get; set; } = new();
     }
     public class DeviceRegisterDto
     {

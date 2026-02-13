@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace MyApp.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class AddOpcUaNodeIdToMapping5 : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -32,8 +32,14 @@ namespace MyApp.Infrastructure.Migrations
                 {
                     ConfigurationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     Name = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    PollIntervalMs = table.Column<int>(type: "int", nullable: false),
-                    ProtocolSettingsJson = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    Protocol = table.Column<int>(type: "int", nullable: false),
+                    ConnectionString = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    ConnectionMode = table.Column<int>(type: "int", nullable: true),
+                    PollIntervalMs = table.Column<int>(type: "int", nullable: true),
+                    IpAddress = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    Port = table.Column<int>(type: "int", nullable: true),
+                    SlaveId = table.Column<int>(type: "int", nullable: true),
+                    Endian = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
                 },
                 constraints: table =>
@@ -42,13 +48,30 @@ namespace MyApp.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Gateway",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Name = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    ClientId = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    ClientSecretHash = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Status = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Gateway", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Devices",
                 columns: table => new
                 {
                     DeviceId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    GatewayId = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     Name = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     Description = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    Protocol = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    Protocol = table.Column<int>(type: "int", nullable: false),
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     DeviceConfigurationId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
@@ -77,6 +100,30 @@ namespace MyApp.Infrastructure.Migrations
                     table.PrimaryKey("PK_DeviceSlaves", x => x.deviceSlaveId);
                     table.ForeignKey(
                         name: "FK_DeviceSlaves_Devices_DeviceId",
+                        column: x => x.DeviceId,
+                        principalTable: "Devices",
+                        principalColumn: "DeviceId",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "OpcUaNodes",
+                columns: table => new
+                {
+                    OpcUaNodeId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    DeviceId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    NodeId = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
+                    SignalName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    DataType = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    Unit = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: true),
+                    ScalingFactor = table.Column<double>(type: "float", nullable: false, defaultValue: 1.0),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OpcUaNodes", x => x.OpcUaNodeId);
+                    table.ForeignKey(
+                        name: "FK_OpcUaNodes_Devices_DeviceId",
                         column: x => x.DeviceId,
                         principalTable: "Devices",
                         principalColumn: "DeviceId",
@@ -121,6 +168,12 @@ namespace MyApp.Infrastructure.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_OpcUaNodes_DeviceId_NodeId",
+                table: "OpcUaNodes",
+                columns: new[] { "DeviceId", "NodeId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Registers_deviceSlaveId_RegisterAddress",
                 table: "Registers",
                 columns: new[] { "deviceSlaveId", "RegisterAddress" },
@@ -132,6 +185,12 @@ namespace MyApp.Infrastructure.Migrations
         {
             migrationBuilder.DropTable(
                 name: "ApiLogs");
+
+            migrationBuilder.DropTable(
+                name: "Gateway");
+
+            migrationBuilder.DropTable(
+                name: "OpcUaNodes");
 
             migrationBuilder.DropTable(
                 name: "Registers");

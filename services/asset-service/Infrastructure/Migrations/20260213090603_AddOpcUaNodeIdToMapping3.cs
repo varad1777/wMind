@@ -6,24 +6,24 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class AddOpcUaNodeIdToMapping : Migration
+    public partial class AddOpcUaNodeIdToMapping3 : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<Guid>(
-                name: "opcUaNodeId",
-                table: "MappingTable",
-                type: "uniqueidentifier",
-                nullable: true);
+            migrationBuilder.DropColumn(
+                name: "OpcUaNodeId",
+                table: "MappingTable");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "opcUaNodeId",
-                table: "MappingTable");
+            migrationBuilder.AddColumn<Guid>(
+                name: "OpcUaNodeId",
+                table: "MappingTable",
+                type: "uniqueidentifier",
+                nullable: true);
         }
     }
 }

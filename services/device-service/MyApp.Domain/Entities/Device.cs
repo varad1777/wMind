@@ -19,6 +19,7 @@ namespace MyApp.Domain.Entities
         public Guid? DeviceConfigurationId { get; set; }
         public DeviceConfiguration? DeviceConfiguration { get; set; }
         public ICollection<DeviceSlave> DeviceSlave { get; set; } = new List<DeviceSlave>();
+        public ICollection<OpcUaNode> OpcUaNodes { get; set; } = new List<OpcUaNode>();
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }

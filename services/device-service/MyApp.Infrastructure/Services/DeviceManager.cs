@@ -921,6 +921,139 @@ namespace MyApp.Infrastructure.Services
                 .ToListAsync(ct);
         }
 
+        // ============================================
+        // OPC UA NODE MANAGEMENT
+        // ============================================
+
+        public async Task<Guid> AddOpcUaNodeAsync(
+        Guid deviceId,
+        CreateOpcUaNodeRequest request,
+        CancellationToken ct = default)
+    {
+        if (request == null)
+            throw new ArgumentNullException(nameof(request));
+
+        var device = await _db.Devices
+            .FirstOrDefaultAsync(d => d.DeviceId == deviceId && !d.IsDeleted, ct);
+
+        if (device == null)
+            throw new KeyNotFoundException("Device not found");
+
+        if (device.Protocol != DeviceProtocol.OpcUa)
+            throw new InvalidOperationException("Device protocol must be OPC UA to add OPC UA nodes");
+
+        // Check for duplicate NodeId
+        var exists = await _db.OpcUaNodes
+            .AnyAsync(n => n.DeviceId == deviceId && n.NodeId == request.NodeId, ct);
+
+        if (exists)
+            throw new InvalidOperationException($"OPC UA node with NodeId '{request.NodeId}' already exists for this device");
+
+        var node = new OpcUaNode
+        {
+            OpcUaNodeId = Guid.NewGuid(),
+            DeviceId = deviceId,
+            NodeId = request.NodeId,
+            SignalName = request.SignalName,
+            DataType = request.DataType,
+            Unit = request.Unit,
+            ScalingFactor = request.ScalingFactor,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _db.OpcUaNodes.AddAsync(node, ct);
+        await _db.SaveChangesAsync(ct);
+
+        _log.LogInformation("Created OPC UA node {NodeId} for device {DeviceId}", 
+            node.OpcUaNodeId, deviceId);
+
+            return node.OpcUaNodeId;
+        }
+
+        public async Task<List<OpcUaNode>> GetOpcUaNodesByDeviceAsync(
+            Guid deviceId,
+            CancellationToken ct = default)
+        {
+            return await _db.OpcUaNodes
+                .AsNoTracking()
+                .Where(n => n.DeviceId == deviceId)
+                .OrderBy(n => n.SignalName)
+                .ToListAsync(ct);
+        }
+
+        public async Task<OpcUaNode?> GetOpcUaNodeAsync(
+            Guid nodeId,
+            CancellationToken ct = default)
+        {
+            return await _db.OpcUaNodes
+                .AsNoTracking()
+                .FirstOrDefaultAsync(n => n.OpcUaNodeId == nodeId, ct);
+        }
+
+        public async Task UpdateOpcUaNodeAsync(
+            Guid nodeId,
+            CreateOpcUaNodeRequest request,
+            CancellationToken ct = default)
+        {
+            if (request == null)
+                throw new ArgumentNullException(nameof(request));
+
+            var node = await _db.OpcUaNodes.FindAsync(new object[] { nodeId }, ct);
+            if (node == null)
+                throw new KeyNotFoundException("OPC UA node not found");
+
+            // Check if node is mapped to asset
+            var isMapped = await _assetDb.MappingTable
+                .AsNoTracking()
+                .AnyAsync(m => m.DeviceId == node.DeviceId && m.SignalName == node.SignalName, ct);
+
+            if (isMapped)
+                throw new InvalidOperationException(
+                    "Cannot update OPC UA node because it is mapped to an asset");
+
+            // Check for duplicate NodeId (excluding current node)
+            var exists = await _db.OpcUaNodes
+                .AnyAsync(n => n.DeviceId == node.DeviceId && 
+                            n.NodeId == request.NodeId && 
+                            n.OpcUaNodeId != nodeId, ct);
+
+            if (exists)
+                throw new InvalidOperationException(
+                    $"Another OPC UA node with NodeId '{request.NodeId}' already exists for this device");
+
+            node.NodeId = request.NodeId;
+            node.SignalName = request.SignalName;
+            node.DataType = request.DataType;
+            node.Unit = request.Unit;
+            node.ScalingFactor = request.ScalingFactor;
+
+            _db.Entry(node).State = EntityState.Modified;
+            await _db.SaveChangesAsync(ct);
+
+            _log.LogInformation("Updated OPC UA node {NodeId}", nodeId);
+        }
+
+        public async Task DeleteOpcUaNodeAsync(Guid nodeId, CancellationToken ct = default)
+        {
+            var node = await _db.OpcUaNodes.FindAsync(new object[] { nodeId }, ct);
+            if (node == null)
+                throw new KeyNotFoundException("OPC UA node not found");
+
+            // Check if node is mapped to asset
+            var isMapped = await _assetDb.MappingTable
+                .AsNoTracking()
+                .AnyAsync(m => m.DeviceId == node.DeviceId && m.SignalName == node.SignalName, ct);
+
+            if (isMapped)
+                throw new InvalidOperationException(
+                    "Cannot delete OPC UA node because it is mapped to an asset");
+
+            _db.OpcUaNodes.Remove(node);
+            await _db.SaveChangesAsync(ct);
+
+            _log.LogInformation("Deleted OPC UA node {NodeId}", nodeId);
+        }
+
         public async Task<BulkCreateDeviceResultDto> CreateDevicesBulkAsync(BulkCreateDeviceDto request, CancellationToken ct = default)
         {
             if (request == null || request.Devices.Count == 0)
@@ -1072,148 +1205,152 @@ namespace MyApp.Infrastructure.Services
         public async Task<List<DeviceConfigurationResponseDto>> GetDeviceConfigurationsByGatewayAsync(
         string gatewayId,
         CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(gatewayId))
+            throw new ArgumentException("GatewayId cannot be empty.", nameof(gatewayId));
+
+        // STEP 1: Get devices for this gateway
+        var gatewayDeviceIds = await _db.Devices
+            .AsNoTracking()
+            .Where(d => d.GatewayId == gatewayId && !d.IsDeleted)
+            .Select(d => d.DeviceId)
+            .ToListAsync(ct);
+
+        if (!gatewayDeviceIds.Any())
+            throw new KeyNotFoundException($"No gateway found with GatewayId '{gatewayId}'.");
+
+        // STEP 2: Get mapping info
+        var mappings = await _assetDb.MappingTable
+            .AsNoTracking()
+            .Where(m => gatewayDeviceIds.Contains(m.DeviceId))
+            .Select(m => new { 
+                m.DeviceId, 
+                RegisterId = m.registerId,
+                m.SignalName
+            })
+            .ToListAsync(ct);
+
+        if (!mappings.Any())
+            return new List<DeviceConfigurationResponseDto>();
+
+        var mappedDeviceIds = mappings.Select(m => m.DeviceId).Distinct().ToList();
+
+        // STEP 3: Load devices with all related data
+        var devices = await _db.Devices
+            .AsNoTracking()
+            .Where(d => mappedDeviceIds.Contains(d.DeviceId) && !d.IsDeleted)
+            .Include(d => d.DeviceConfiguration)
+            .Include(d => d.DeviceSlave)
+                .ThenInclude(s => s.Registers)
+            .Include(d => d.OpcUaNodes)
+            .ToListAsync(ct);
+
+        if (!devices.Any())
+            return new List<DeviceConfigurationResponseDto>();
+
+        // STEP 4: Build lookups for mapped data
+        var mappedRegistersByDevice = mappings
+            .Where(m => m.RegisterId != Guid.Empty)
+            .GroupBy(m => m.DeviceId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(x => x.RegisterId).ToHashSet()
+            );
+
+        var mappedSignalsByDevice = mappings
+            .Where(m => !string.IsNullOrEmpty(m.SignalName))
+            .GroupBy(m => m.DeviceId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(x => x.SignalName).ToHashSet()
+            );
+
+        // STEP 5: Build response
+        var result = devices.Select(device =>
         {
-            if (string.IsNullOrWhiteSpace(gatewayId))
-                throw new ArgumentException(
-                    "GatewayId cannot be empty.",
-                    nameof(gatewayId));
+            var cfg = device.DeviceConfiguration;
 
-            // STEP 1: Get devices for this gateway
-            var gatewayDeviceIds =
-                await _db.Devices.AsNoTracking()
-                    .Where(d => d.GatewayId == gatewayId && !d.IsDeleted)
-                    .Select(d => d.DeviceId)
-                    .ToListAsync(ct);
+            return new DeviceConfigurationResponseDto
+            {
+                DeviceId = device.DeviceId,
+                Name = device.Name,
+                Protocol = device.Protocol,
 
-            if (!gatewayDeviceIds.Any())
-                throw new KeyNotFoundException(
-                    $"No gateway found with GatewayId '{gatewayId}'.");
+                // ---------- Polling ----------
+                PollIntervalMs = cfg == null ? null :
+                    cfg.Protocol == DeviceProtocol.Modbus
+                        ? cfg.PollIntervalMs ?? 1000
+                        : cfg.ConnectionMode == OpcUaConnectionMode.Polling
+                            ? cfg.PollIntervalMs
+                            : null,
 
-            // STEP 2: Get mapping info
-            var mappings =
-                await _assetDb.MappingTable.AsNoTracking()
-                    .Where(m => gatewayDeviceIds.Contains(m.DeviceId))
-                    .Select(m => new { m.DeviceId, RegisterId = m.registerId })
-                    .ToListAsync(ct);
+                // ---------- MODBUS ONLY ----------
+                IpAddress = cfg?.Protocol == DeviceProtocol.Modbus ? cfg.IpAddress : null,
+                Port = cfg?.Protocol == DeviceProtocol.Modbus ? cfg.Port : null,
+                SlaveId = cfg?.Protocol == DeviceProtocol.Modbus && cfg.SlaveId.HasValue
+                    ? (byte)cfg.SlaveId.Value
+                    : (byte?)null,
+                Endian = cfg?.Protocol == DeviceProtocol.Modbus ? cfg.Endian : null,
 
-            if (!mappings.Any())
-                return new List<DeviceConfigurationResponseDto>();
+                // ---------- OPC UA ----------
+                ConnectionString = cfg?.Protocol == DeviceProtocol.OpcUa ? cfg.ConnectionString : null,
+                ConnectionMode = cfg?.Protocol == DeviceProtocol.OpcUa ? cfg.ConnectionMode : null,
 
-            var mappedDeviceIds =
-                mappings.Select(m => m.DeviceId).Distinct().ToList();
-
-            // STEP 3: Load devices + configuration + slaves + registers
-            var devices =
-                await _db.Devices.AsNoTracking()
-                    .Where(d => mappedDeviceIds.Contains(d.DeviceId) && !d.IsDeleted)
-                    .Include(d => d.DeviceConfiguration)
-                    .Include(d => d.DeviceSlave)
-                        .ThenInclude(s => s.Registers)
-                    .ToListAsync(ct);
-
-            if (!devices.Any())
-                return new List<DeviceConfigurationResponseDto>();
-
-            // STEP 4: Build lookup for mapped registers
-            var mappedRegistersByDevice =
-                mappings.GroupBy(m => m.DeviceId)
-                    .ToDictionary(
-                        g => g.Key,
-                        g => g.Select(x => x.RegisterId).ToHashSet());
-
-            // STEP 5: Build response
-            var result =
-                devices.Select(device =>
-                {
-                    var cfg = device.DeviceConfiguration;
-
-                    return new DeviceConfigurationResponseDto
-                    {
-                        DeviceId = device.DeviceId,
-                        Name = device.Name,
-                        Protocol = device.Protocol, // device-level protocol (kept)
-
-                        // ---------- Polling ----------
-                        PollIntervalMs =
-                            cfg == null ? null :
-                            cfg.Protocol == DeviceProtocol.Modbus
-                                ? cfg.PollIntervalMs ?? 1000
-                                : cfg.ConnectionMode == OpcUaConnectionMode.Polling
-                                    ? cfg.PollIntervalMs
-                                    : null,
-
-                        // ---------- MODBUS ONLY ----------
-                        IpAddress =
-                            cfg?.Protocol == DeviceProtocol.Modbus
-                                ? cfg.IpAddress
-                                : null,
-
-                        Port =
-                            cfg?.Protocol == DeviceProtocol.Modbus
-                                ? cfg.Port
-                                : null,
-
-                        SlaveId =
-                            cfg?.Protocol == DeviceProtocol.Modbus && cfg.SlaveId.HasValue
-                                ? (byte)cfg.SlaveId.Value
-                                : (byte?)null,
-
-                        Endian =
-                            cfg?.Protocol == DeviceProtocol.Modbus
-                                ? cfg.Endian
-                                : null,
-
-                        // ---------- OPC UA ----------
-                        ConnectionString =
-                            cfg?.Protocol == DeviceProtocol.OpcUa
-                                ? cfg.ConnectionString
-                                : null,
-
-                        ConnectionMode =
-                            cfg?.Protocol == DeviceProtocol.OpcUa
-                                ? cfg.ConnectionMode
-                                : null,
-
-                        Slaves =
-                            device.DeviceSlave
-                                .Where(s => s.IsHealthy)
-                                .Select(s => new SlaveDto
+                // ---------- MODBUS SLAVES ----------
+                Slaves = device.Protocol == DeviceProtocol.Modbus
+                    ? device.DeviceSlave
+                        .Where(s => s.IsHealthy)
+                        .Select(s => new SlaveDto
+                        {
+                            DeviceSlaveId = s.deviceSlaveId,
+                            SlaveIndex = s.slaveIndex,
+                            IsHealthy = s.IsHealthy,
+                            Registers = s.Registers
+                                .Where(r =>
+                                    r.IsHealthy &&
+                                    mappedRegistersByDevice.TryGetValue(device.DeviceId, out var registerIds) &&
+                                    registerIds.Contains(r.RegisterId))
+                                .OrderBy(r => r.RegisterAddress)
+                                .Select(r => new DeviceRegisterDto
                                 {
-                                    DeviceSlaveId = s.deviceSlaveId,
-                                    SlaveIndex = s.slaveIndex,
-                                    IsHealthy = s.IsHealthy,
-
-                                    Registers =
-                                        s.Registers
-                                            .Where(r =>
-                                                r.IsHealthy &&
-                                                mappedRegistersByDevice.TryGetValue(
-                                                    device.DeviceId,
-                                                    out var registerIds) &&
-                                                registerIds.Contains(r.RegisterId))
-                                            .OrderBy(r => r.RegisterAddress)
-                                            .Select(r => new DeviceRegisterDto
-                                            {
-                                                RegisterId = r.RegisterId,
-                                                RegisterAddress = r.RegisterAddress,
-                                                RegisterLength = r.RegisterLength,
-                                                DataType = r.DataType,
-                                                Scale = r.Scale,
-                                                Unit = r.Unit,
-                                                ByteOrder = r.ByteOrder,
-                                                WordSwap = r.WordSwap,
-                                                IsHealthy = r.IsHealthy
-                                            })
-                                            .ToList()
+                                    RegisterId = r.RegisterId,
+                                    RegisterAddress = r.RegisterAddress,
+                                    RegisterLength = r.RegisterLength,
+                                    DataType = r.DataType,
+                                    Scale = r.Scale,
+                                    Unit = r.Unit,
+                                    ByteOrder = r.ByteOrder,
+                                    WordSwap = r.WordSwap,
+                                    IsHealthy = r.IsHealthy
                                 })
                                 .ToList()
-                    };
-                })
-                .ToList();
+                        })
+                        .ToList()
+                    : new List<SlaveDto>(),
 
-            return result;
+                // ---------- OPC UA NODES ----------
+                OpcUaNodes = device.Protocol == DeviceProtocol.OpcUa
+                    ? device.OpcUaNodes
+                        .Where(n =>
+                            mappedSignalsByDevice.TryGetValue(device.DeviceId, out var signalNames) &&
+                            signalNames.Contains(n.SignalName))
+                        .OrderBy(n => n.SignalName)
+                        .Select(n => new OpcUaNodeDto
+                        {
+                            OpcUaNodeId = n.OpcUaNodeId,
+                            NodeId = n.NodeId,
+                            SignalName = n.SignalName,
+                            DataType = n.DataType,
+                            Unit = n.Unit,
+                            ScalingFactor = n.ScalingFactor
+                        })
+                        .ToList()
+                    : new List<OpcUaNodeDto>()
+            };
+        }).ToList();
 
-        }
+        return result;
+    }
     }
 
 }

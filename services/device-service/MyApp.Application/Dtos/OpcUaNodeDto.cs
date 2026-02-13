@@ -1,4 +1,3 @@
-// Application/Dtos/OpcUaNodeDto.cs
 using System;
 using System.ComponentModel.DataAnnotations;
 
@@ -7,24 +6,43 @@ namespace MyApp.Application.Dtos
     public class OpcUaNodeDto
     {
         public Guid? OpcUaNodeId { get; set; }
-
-        [Required, StringLength(500)]
+        
+        [Required]
+        [MaxLength(500)]
         public string NodeId { get; set; } = string.Empty;
 
-        [Required, StringLength(200)]
-        public string DisplayName { get; set; } = string.Empty;
+        [Required]
+        [MaxLength(200)]
+        public string SignalName { get; set; } = string.Empty;
 
-        [Required, StringLength(50)]
-        public string DataType { get; set; } = "Double";
+        [Required]
+        [MaxLength(50)]
+        public string DataType { get; set; } = string.Empty;
 
-        [StringLength(50)]
+        [MaxLength(20)]
         public string? Unit { get; set; }
 
-        public bool IsHealthy { get; set; } = true;
+        public double ScalingFactor { get; set; } = 1.0;
     }
 
-    public class AddOpcUaNodesDto
+    // Request DTO for creating OPC UA node
+    public class CreateOpcUaNodeRequest
     {
-        public List<OpcUaNodeDto> Nodes { get; set; } = new();
+        [Required]
+        [MaxLength(500)]
+        public string NodeId { get; set; } = string.Empty;
+
+        [Required]
+        [MaxLength(200)]
+        public string SignalName { get; set; } = string.Empty;
+
+        [Required]
+        [MaxLength(50)]
+        public string DataType { get; set; } = string.Empty;
+
+        [MaxLength(20)]
+        public string? Unit { get; set; }
+
+        public double ScalingFactor { get; set; } = 1.0;
     }
 }

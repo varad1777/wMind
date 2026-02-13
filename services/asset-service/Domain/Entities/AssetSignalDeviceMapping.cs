@@ -29,6 +29,7 @@ namespace MappingService.Domain.Entities
 
         public int RegisterAdress { get; set; } 
         public Guid registerId { get; set; }
+        // public Guid? OpcUaNodeId { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }

@@ -1,7 +1,5 @@
-// Domain/Entities/OpcUaNode.cs
 using System;
 using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
 
 namespace MyApp.Domain.Entities
 {
@@ -10,23 +8,29 @@ namespace MyApp.Domain.Entities
         [Key]
         public Guid OpcUaNodeId { get; set; } = Guid.NewGuid();
 
+        [Required]
         public Guid DeviceId { get; set; }
-        
-        [JsonIgnore]
-        public Device Device { get; set; } = null!;
 
-        [Required, StringLength(500)]
+        [Required]
+        [MaxLength(500)]
         public string NodeId { get; set; } = string.Empty;
 
-        [Required, StringLength(200)]
-        public string DisplayName { get; set; } = string.Empty;
+        [Required]
+        [MaxLength(200)]
+        public string SignalName { get; set; } = string.Empty;
 
-        [Required, StringLength(50)]
-        public string DataType { get; set; } = "Double";
+        [Required]
+        [MaxLength(50)]
+        public string DataType { get; set; } = string.Empty;
 
-        [StringLength(50)]
+        [MaxLength(20)]
         public string? Unit { get; set; }
 
-        public bool IsHealthy { get; set; } = true;
+        public double ScalingFactor { get; set; } = 1.0;
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        // Navigation
+        public Device Device { get; set; } = null!;
     }
 }

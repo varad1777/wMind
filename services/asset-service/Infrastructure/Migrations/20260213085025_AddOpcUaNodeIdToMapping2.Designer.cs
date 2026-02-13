@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(DBContext))]
-    [Migration("20260212121221_AddOpcUaNodeIdToMapping")]
-    partial class AddOpcUaNodeIdToMapping
+    [Migration("20260213085025_AddOpcUaNodeIdToMapping2")]
+    partial class AddOpcUaNodeIdToMapping2
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -450,6 +450,9 @@ namespace Infrastructure.Migrations
                     b.Property<Guid>("DevicePortId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("OpcUaNodeId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("RegisterAdress")
                         .HasColumnType("int");
 
@@ -463,9 +466,6 @@ namespace Infrastructure.Migrations
                     b.Property<string>("SignalUnit")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<Guid?>("opcUaNodeId")
-                        .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid>("registerId")
                         .HasColumnType("uniqueidentifier");

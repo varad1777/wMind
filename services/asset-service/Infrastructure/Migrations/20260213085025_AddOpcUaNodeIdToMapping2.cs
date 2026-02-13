@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class AddSignalTable1 : Migration
+    public partial class AddOpcUaNodeIdToMapping2 : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -90,6 +90,7 @@ namespace Infrastructure.Migrations
                     SignalName = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     RegisterAdress = table.Column<int>(type: "int", nullable: false),
                     registerId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    OpcUaNodeId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
                 },
                 constraints: table =>

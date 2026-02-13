@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(DBContext))]
-    [Migration("20260212063702_AddSignalTable2")]
-    partial class AddSignalTable2
+    [Migration("20260213090603_AddOpcUaNodeIdToMapping3")]
+    partial class AddOpcUaNodeIdToMapping3
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

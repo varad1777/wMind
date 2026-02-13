@@ -12,8 +12,8 @@ using MyApp.Infrastructure.Data;
 namespace MyApp.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260121055610_Adding-Gateway-ID")]
-    partial class AddingGatewayID
+    [Migration("20260213092216_AddOpcUaNodeIdToMapping5")]
+    partial class AddOpcUaNodeIdToMapping5
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -63,8 +63,9 @@ namespace MyApp.Infrastructure.Migrations
                     b.Property<Guid?>("DeviceConfigurationId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid>("GatewayId")
-                        .HasColumnType("uniqueidentifier");
+                    b.Property<string>("GatewayId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
@@ -73,8 +74,8 @@ namespace MyApp.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Protocol")
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int>("Protocol")
+                        .HasColumnType("int");
 
                     b.HasKey("DeviceId");
 
@@ -89,18 +90,36 @@ namespace MyApp.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<int?>("ConnectionMode")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ConnectionString")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("Endian")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("IpAddress")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int>("PollIntervalMs")
+                    b.Property<int?>("PollIntervalMs")
                         .HasColumnType("int");
 
-                    b.Property<string>("ProtocolSettingsJson")
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<int?>("Port")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Protocol")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SlaveId")
+                        .HasColumnType("int");
 
                     b.HasKey("ConfigurationId");
 
@@ -128,6 +147,83 @@ namespace MyApp.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("DeviceSlaves");
+                });
+
+            modelBuilder.Entity("MyApp.Domain.Entities.Gateway", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ClientId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ClientSecretHash")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Gateway");
+                });
+
+            modelBuilder.Entity("MyApp.Domain.Entities.OpcUaNode", b =>
+                {
+                    b.Property<Guid>("OpcUaNodeId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DataType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid>("DeviceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("NodeId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<double>("ScalingFactor")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("float")
+                        .HasDefaultValue(1.0);
+
+                    b.Property<string>("SignalName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("OpcUaNodeId");
+
+                    b.HasIndex("DeviceId", "NodeId")
+                        .IsUnique();
+
+                    b.ToTable("OpcUaNodes");
                 });
 
             modelBuilder.Entity("MyApp.Domain.Entities.Register", b =>
@@ -194,6 +290,17 @@ namespace MyApp.Infrastructure.Migrations
                     b.Navigation("Device");
                 });
 
+            modelBuilder.Entity("MyApp.Domain.Entities.OpcUaNode", b =>
+                {
+                    b.HasOne("MyApp.Domain.Entities.Device", "Device")
+                        .WithMany("OpcUaNodes")
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Device");
+                });
+
             modelBuilder.Entity("MyApp.Domain.Entities.Register", b =>
                 {
                     b.HasOne("MyApp.Domain.Entities.DeviceSlave", "DeviceSlave")
@@ -208,6 +315,8 @@ namespace MyApp.Infrastructure.Migrations
             modelBuilder.Entity("MyApp.Domain.Entities.Device", b =>
                 {
                     b.Navigation("DeviceSlave");
+
+                    b.Navigation("OpcUaNodes");
                 });
 
             modelBuilder.Entity("MyApp.Domain.Entities.DeviceSlave", b =>

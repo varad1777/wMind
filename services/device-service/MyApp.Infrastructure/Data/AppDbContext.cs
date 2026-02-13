@@ -12,6 +12,7 @@ namespace MyApp.Infrastructure.Data
         public DbSet<DeviceConfiguration> DeviceConfigurations => Set<DeviceConfiguration>();
         public DbSet<DeviceSlave> DeviceSlaves => Set<DeviceSlave>();
         public DbSet<Register> Registers => Set<Register>();
+        public DbSet<OpcUaNode> OpcUaNodes => Set<OpcUaNode>(); 
 
         public DbSet<ApiLog> ApiLogs => Set<ApiLog>();
 
@@ -65,6 +66,34 @@ namespace MyApp.Infrastructure.Data
             mb.Entity<Register>()
                 .HasIndex(r => new { r.deviceSlaveId, r.RegisterAddress })
                 .IsUnique();
+            
+            // In AppDbContext.cs OnModelCreating method
+            mb.Entity<OpcUaNode>(entity =>
+            {
+                entity.HasKey(e => e.OpcUaNodeId);
+                
+                entity.Property(e => e.NodeId)
+                    .IsRequired()
+                    .HasMaxLength(500);
+                
+                entity.Property(e => e.SignalName)
+                    .IsRequired()
+                    .HasMaxLength(200);
+                
+                entity.Property(e => e.DataType)
+                    .IsRequired()
+                    .HasMaxLength(50);
+                
+                entity.Property(e => e.Unit)
+                    .HasMaxLength(20);
+                
+                entity.Property(e => e.ScalingFactor)
+                    .HasDefaultValue(1.0);
+
+                // Unique constraint: One NodeId per Device
+                entity.HasIndex(e => new { e.DeviceId, e.NodeId })
+                    .IsUnique();
+            });
 
             base.OnModelCreating(mb);
         }
