@@ -82,10 +82,14 @@ export default function OpcUaNodeForm() {
 
     // Check for duplicate nodeId (excluding current editing node)
     const duplicate = nodes.some(
-      (n) => n.id !== editingNode?.id && n.nodeId === node.nodeId
+      (n) =>
+        n.opcUaNodeId !== editingNode?.opcUaNodeId && // Exclude the node being edited
+        n.nodeId.trim().toLowerCase() === node.nodeId.trim().toLowerCase()
     );
 
-    if (duplicate) return "Node ID already exists";
+    if (duplicate) {
+      return "Node ID already exists";
+    }
     return null;
   };
 
@@ -98,9 +102,9 @@ export default function OpcUaNodeForm() {
 
     setLoading(true);
     try {
-      if (editingNode?.id) {
+      if (editingNode?.opcUaNodeId) { // Changed from editingNode?.id
         // UPDATE existing node
-        await updateOpcUaNode(deviceId, editingNode.id, nodeForm);
+        await updateOpcUaNode(deviceId, editingNode.opcUaNodeId, nodeForm); // Changed from editingNode.id
         toast.success("Node updated successfully");
       } else {
         // CREATE new node
@@ -118,32 +122,39 @@ export default function OpcUaNodeForm() {
   };
 
   const handleDeleteNode = async (node: OpcUaNode) => {
-    if (!node.id) return;
-    
-    if (!window.confirm(`Delete node "${node.signalName || node.nodeId}"?`)) {
-      return;
-    }
+  // Change from node.id to node.opcUaNodeId
+  if (!node.opcUaNodeId) {
+    console.error("No node ID found!");
+    toast.error("Cannot delete: Node ID is missing");
+    return;
+  }
+  
+  if (!window.confirm(`Delete node "${node.signalName || node.nodeId}"?`)) {
+    return;
+  }
 
-    try {
-      await deleteOpcUaNode(deviceId, node.id);
-      toast.success("Node deleted successfully");
-      await fetchNodes(); // Refresh the list
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed to delete node");
-    }
-  };
+  try {
+    console.log("Deleting node with ID:", node.opcUaNodeId);
+    await deleteOpcUaNode(deviceId, node.opcUaNodeId); // Use opcUaNodeId here
+    toast.success("Node deleted successfully");
+    await fetchNodes();
+  } catch (error: any) {
+    toast.error(error?.response?.data?.message || "Failed to delete node");
+  }
+};
 
-  const handleEditNode = (node: OpcUaNode) => {
-    setNodeForm({
-      nodeId: node.nodeId,
-      signalName: node.signalName || "",
-      dataType: node.dataType || "float",
-      unit: node.unit || "V",
-      scalingFactor: node.scalingFactor || 1
-    });
-    setEditingNode(node);
-    setShowNodeForm(true);
-  };
+const handleEditNode = (node: OpcUaNode) => {
+  setNodeForm({
+    nodeId: node.nodeId,
+    signalName: node.signalName || "",
+    dataType: node.dataType || "float",
+    unit: node.unit || "V",
+    scalingFactor: node.scalingFactor || 1
+  });
+  setEditingNode(node);
+  setShowNodeForm(true);
+};
+
 
   const cancelNodeForm = () => {
     setNodeForm({ ...defaultNode });
@@ -307,7 +318,7 @@ export default function OpcUaNodeForm() {
               </thead>
               <tbody>
                 {nodes.map((n) => (
-                  <tr key={n.id} className="border-t border-border">
+                  <tr key={n.opcUaNodeId} className="border-t border-border">
                     <td className="p-3 font-mono text-sm">{n.nodeId}</td>
                     <td className="p-3">{n.signalName}</td>
                     <td className="p-3">{n.unit}</td>
