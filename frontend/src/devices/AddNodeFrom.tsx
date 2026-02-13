@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -8,16 +8,19 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
-import { Plus, Save, Edit2, Trash2, Database, Network } from "lucide-react";
+import { Plus, Save, Edit2, Trash2, Database, Network, Loader2 } from "lucide-react";
 import { toast } from "react-toastify";
+import {
+  createOpcUaNode,
+  getOpcUaNodes,
+  getSingleOpcUaNode,
+  updateOpcUaNode,
+  deleteOpcUaNode,
+  OpcUaNode,
+  CreateOpcUaNodeRequest
+} from "@/api/opcUaApi";
+import { useParams } from "react-router-dom";
 
-export type OpcUaNodePayload = {
-  nodeId: string;
-  signalName: string;
-  dataType: "int" | "float";
-  unit: string;
-  scalingFactor: number;
-};
 
 const UNIT_OPTIONS = [
   { name: "FlowRate", unit: "L/min" },
@@ -30,7 +33,7 @@ const UNIT_OPTIONS = [
   { name: "Temperature", unit: "°C" }
 ];
 
-const defaultNode: OpcUaNodePayload = {
+const defaultNode: CreateOpcUaNodeRequest = {
   nodeId: "ns=2;s=",
   signalName: "",
   dataType: "float",
@@ -38,64 +41,113 @@ const defaultNode: OpcUaNodePayload = {
   scalingFactor: 1
 };
 
-export default function OpcUaNodeForm() {
-  const [nodes, setNodes] = useState<OpcUaNodePayload[]>([]);
-  const [showNodeForm, setShowNodeForm] = useState(false);
-  const [editingNodeIdx, setEditingNodeIdx] = useState<number | null>(null);
-  const [nodeForm, setNodeForm] = useState<OpcUaNodePayload>({ ...defaultNode });
+interface OpcUaNodeFormProps {
+  deviceId: string; // Pass deviceId as prop
+}
 
-  const updateNodeForm = <K extends keyof OpcUaNodePayload>(
+export default function OpcUaNodeForm() {
+  const { deviceId } = useParams<{ deviceId: string }>();
+  const [nodes, setNodes] = useState<OpcUaNode[]>([]);
+  const [showNodeForm, setShowNodeForm] = useState(false);
+  const [editingNode, setEditingNode] = useState<OpcUaNode | null>(null);
+  const [nodeForm, setNodeForm] = useState<CreateOpcUaNodeRequest>({ ...defaultNode });
+  const [loading, setLoading] = useState(false);
+  const [fetchingNodes, setFetchingNodes] = useState(true);
+
+  // Fetch all nodes on mount
+  useEffect(() => {
+    fetchNodes();
+  }, [deviceId]);
+
+  const fetchNodes = async () => {
+    try {
+      setFetchingNodes(true);
+      const data = await getOpcUaNodes(deviceId);
+      setNodes(data);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to fetch nodes");
+    } finally {
+      setFetchingNodes(false);
+    }
+  };
+
+  const updateNodeForm = <K extends keyof CreateOpcUaNodeRequest>(
     key: K,
-    value: OpcUaNodePayload[K]
+    value: CreateOpcUaNodeRequest[K]
   ) => setNodeForm(prev => ({ ...prev, [key]: value }));
 
-  const validateNode = (node: OpcUaNodePayload) => {
+  const validateNode = (node: CreateOpcUaNodeRequest) => {
     if (!node.nodeId.trim()) return "Node ID required";
-    if (!node.signalName.trim()) return "Signal Name required";
+    if (!node.signalName?.trim()) return "Signal Name required";
 
+    // Check for duplicate nodeId (excluding current editing node)
     const duplicate = nodes.some(
-      (n, idx) => idx !== editingNodeIdx && n.nodeId === node.nodeId
+      (n) => n.id !== editingNode?.id && n.nodeId === node.nodeId
     );
 
-    if (duplicate) return "Node already exists";
+    if (duplicate) return "Node ID already exists";
     return null;
   };
 
-  const handleSaveNode = () => {
+  const handleSaveNode = async () => {
     const validationError = validateNode(nodeForm);
     if (validationError) {
       toast.error(validationError);
       return;
     }
 
-    if (editingNodeIdx !== null) {
-      const updated = nodes.map((n, i) =>
-        i === editingNodeIdx ? { ...nodeForm } : n
-      );
-      setNodes(updated);
-      toast.success("Node updated");
-    } else {
-      setNodes([...nodes, { ...nodeForm }]);
-      toast.success("Node added");
+    setLoading(true);
+    try {
+      if (editingNode?.id) {
+        // UPDATE existing node
+        await updateOpcUaNode(deviceId, editingNode.id, nodeForm);
+        toast.success("Node updated successfully");
+      } else {
+        // CREATE new node
+        await createOpcUaNode(deviceId, nodeForm);
+        toast.success("Node created successfully");
+      }
+
+      await fetchNodes(); // Refresh the list
+      cancelNodeForm();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Operation failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteNode = async (node: OpcUaNode) => {
+    if (!node.id) return;
+    
+    if (!window.confirm(`Delete node "${node.signalName || node.nodeId}"?`)) {
+      return;
     }
 
-    cancelNodeForm();
+    try {
+      await deleteOpcUaNode(deviceId, node.id);
+      toast.success("Node deleted successfully");
+      await fetchNodes(); // Refresh the list
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to delete node");
+    }
   };
 
-  const handleDeleteNode = (idx: number) => {
-    setNodes(nodes.filter((_, i) => i !== idx));
-    toast.success("Node deleted");
-  };
-
-  const handleEditNode = (idx: number) => {
-    setNodeForm({ ...nodes[idx] });
-    setEditingNodeIdx(idx);
+  const handleEditNode = (node: OpcUaNode) => {
+    setNodeForm({
+      nodeId: node.nodeId,
+      signalName: node.signalName || "",
+      dataType: node.dataType || "float",
+      unit: node.unit || "V",
+      scalingFactor: node.scalingFactor || 1
+    });
+    setEditingNode(node);
     setShowNodeForm(true);
   };
 
   const cancelNodeForm = () => {
     setNodeForm({ ...defaultNode });
-    setEditingNodeIdx(null);
+    setEditingNode(null);
     setShowNodeForm(false);
   };
 
@@ -116,7 +168,7 @@ export default function OpcUaNodeForm() {
         {/* ADD BUTTON */}
         <div className="bg-card border border-border rounded-lg p-6">
           {!showNodeForm && (
-            <Button onClick={() => setShowNodeForm(true)}>
+            <Button onClick={() => setShowNodeForm(true)} disabled={loading}>
               <Plus className="w-4 h-4 mr-2" />
               Add Node
             </Button>
@@ -126,6 +178,9 @@ export default function OpcUaNodeForm() {
         {/* FORM */}
         {showNodeForm && (
           <div className="bg-card border border-border rounded-lg p-6 space-y-5">
+            <h2 className="text-lg font-semibold">
+              {editingNode ? "Edit Node" : "Add New Node"}
+            </h2>
 
             {/* NODE ID */}
             <div className="space-y-1">
@@ -135,6 +190,7 @@ export default function OpcUaNodeForm() {
                 placeholder="Example: ns=2;s=Machine/Speed"
                 value={nodeForm.nodeId}
                 onChange={e => updateNodeForm("nodeId", e.target.value)}
+                disabled={loading}
               />
               <p className="text-xs text-muted-foreground">
                 OPC UA format example: ns=2;s=Asset/Signal
@@ -149,6 +205,7 @@ export default function OpcUaNodeForm() {
                 placeholder="Example: Motor Speed"
                 value={nodeForm.signalName}
                 onChange={e => updateNodeForm("signalName", e.target.value)}
+                disabled={loading}
               />
             </div>
 
@@ -157,12 +214,14 @@ export default function OpcUaNodeForm() {
               <label className="text-sm font-medium">Scaling Factor</label>
               <Input
                 type="number"
+                step="0.01"
                 className="focus:bg-primary/5"
                 placeholder="Example: 0.1"
                 value={nodeForm.scalingFactor}
                 onChange={e =>
                   updateNodeForm("scalingFactor", Number(e.target.value))
                 }
+                disabled={loading}
               />
             </div>
 
@@ -172,6 +231,7 @@ export default function OpcUaNodeForm() {
               <Select
                 value={nodeForm.dataType}
                 onValueChange={(v: any) => updateNodeForm("dataType", v)}
+                disabled={loading}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -189,6 +249,7 @@ export default function OpcUaNodeForm() {
               <Select
                 value={nodeForm.unit}
                 onValueChange={v => updateNodeForm("unit", v)}
+                disabled={loading}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -205,11 +266,15 @@ export default function OpcUaNodeForm() {
 
             {/* BUTTONS */}
             <div className="flex gap-3 pt-2">
-              <Button onClick={handleSaveNode}>
-                <Save className="w-4 h-4 mr-2" />
-                Save Node
+              <Button onClick={handleSaveNode} disabled={loading}>
+                {loading ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4 mr-2" />
+                )}
+                {loading ? "Saving..." : "Save Node"}
               </Button>
-              <Button variant="outline" onClick={cancelNodeForm}>
+              <Button variant="outline" onClick={cancelNodeForm} disabled={loading}>
                 Cancel
               </Button>
             </div>
@@ -217,7 +282,12 @@ export default function OpcUaNodeForm() {
         )}
 
         {/* TABLE */}
-        {nodes.length === 0 ? (
+        {fetchingNodes ? (
+          <div className="bg-card border border-border rounded-lg p-12 text-center">
+            <Loader2 className="w-10 h-10 mx-auto mb-3 animate-spin opacity-70" />
+            <p>Loading nodes...</p>
+          </div>
+        ) : nodes.length === 0 ? (
           <div className="bg-card border border-border rounded-lg p-12 text-center">
             <Database className="w-10 h-10 mx-auto mb-3 opacity-70" />
             <p>No OPC UA nodes configured yet</p>
@@ -232,22 +302,32 @@ export default function OpcUaNodeForm() {
                   <th className="p-3">Unit</th>
                   <th className="p-3">Type</th>
                   <th className="p-3">Scaling</th>
-                  <th className="p-3">Action</th>
+                  <th className="p-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {nodes.map((n, i) => (
-                  <tr key={i} className="border-t border-border">
-                    <td className="p-3">{n.nodeId}</td>
+                {nodes.map((n) => (
+                  <tr key={n.id} className="border-t border-border">
+                    <td className="p-3 font-mono text-sm">{n.nodeId}</td>
                     <td className="p-3">{n.signalName}</td>
                     <td className="p-3">{n.unit}</td>
                     <td className="p-3">{n.dataType}</td>
                     <td className="p-3">{n.scalingFactor}</td>
                     <td className="p-3 flex gap-2">
-                      <Button size="sm" onClick={() => handleEditNode(i)}>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleEditNode(n)}
+                        disabled={loading}
+                      >
                         <Edit2 className="w-4 h-4" />
                       </Button>
-                      <Button size="sm" onClick={() => handleDeleteNode(i)}>
+                      <Button 
+                        size="sm" 
+                        variant="destructive"
+                        onClick={() => handleDeleteNode(n)}
+                        disabled={loading}
+                      >
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </td>

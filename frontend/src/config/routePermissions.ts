@@ -11,7 +11,7 @@ export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   "/devices/edit/:deviceId": ["Admin", "Engineer"],
   "/devices/config/:deviceId": ["Admin", "Engineer"],
   "/devices/ports/:id": ["Admin", "Engineer"],
-  "/devices/nodes/:id": ["Admin", "Engineer"],
+  "/devices/nodes/:deviceId": ["Admin", "Engineer"],
   "/devices/upload": ["Admin"],
   "/gateways": ["Admin", "Engineer", "Operator"],
 

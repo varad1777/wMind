@@ -5,19 +5,20 @@ import api from "./axios";
  */
 
 export interface OpcUaNode {
+  id?: string; // GUID from backend
   nodeId: string;
-  displayName?: string;
+  signalName?: string;
   dataType?: string;
   unit?: string;
+  scalingFactor?: number;
 }
 
-export interface AddOpcUaNodesDto {
-  nodeIds: string[];
-}
-
-export interface AddOpcUaNodesResponse {
-  deviceId: string;
-  nodeIds: string[];
+export interface CreateOpcUaNodeRequest {
+  nodeId: string;
+  signalName?: string;
+  dataType?: string;
+  unit?: string;
+  scalingFactor?: number;
 }
 
 /**
@@ -27,45 +28,23 @@ export interface AddOpcUaNodesResponse {
  */
 
 /**
- * 1️⃣ Add OPC UA Nodes
+ * 1️⃣ Create OPC UA Node
  * POST /api/devices/{deviceId}/opcua-nodes
  */
-export const addOpcUaNodes = async (
+export const createOpcUaNode = async (
   deviceId: string,
-  data: AddOpcUaNodesDto
-): Promise<AddOpcUaNodesResponse> => {
-  if (!deviceId) {
-    throw new Error("DeviceId is required");
-  }
-
+  data: CreateOpcUaNodeRequest
+): Promise<string> => {
   const response = await api.post(
     `/devices/${deviceId}/opcua-nodes`,
     data
   );
 
-  return response.data;
+  return response.data.data.opcUaNodeId;
 };
 
 /**
- * 2️⃣ Update OPC UA Nodes (Bulk)
- * PUT /api/devices/{deviceId}/opcua-nodes
- */
-export const updateOpcUaNodes = async (
-  deviceId: string,
-  data: AddOpcUaNodesDto
-): Promise<void> => {
-  if (!deviceId) {
-    throw new Error("DeviceId is required");
-  }
-
-  await api.put(
-    `/devices/${deviceId}/opcua-nodes`,
-    data
-  );
-};
-
-/**
- * 3️⃣ Get All OPC UA Nodes for Device
+ * 2️⃣ Get All OPC UA Nodes for Device
  * GET /api/devices/{deviceId}/opcua-nodes
  */
 export const getOpcUaNodes = async (
@@ -75,34 +54,49 @@ export const getOpcUaNodes = async (
     `/devices/${deviceId}/opcua-nodes`
   );
 
-  return response.data;
+  return response.data.data;
 };
 
 /**
- * 4️⃣ Get Single OPC UA Node
- * GET /api/devices/{deviceId}/opcua-nodes/{nodeId}
+ * 3️⃣ Get Single OPC UA Node
+ * GET /api/devices/{deviceId}/opcua-nodes/{nodeGuid}
  */
 export const getSingleOpcUaNode = async (
   deviceId: string,
-  nodeId: string
+  nodeGuid: string
 ): Promise<OpcUaNode> => {
   const response = await api.get(
-    `/devices/${deviceId}/opcua-nodes/${encodeURIComponent(nodeId)}`
+    `/devices/${deviceId}/opcua-nodes/${nodeGuid}`
   );
 
-  return response.data;
+  return response.data.data;
+};
+
+/**
+ * 4️⃣ Update OPC UA Node
+ * PUT /api/devices/{deviceId}/opcua-nodes/{nodeGuid}
+ */
+export const updateOpcUaNode = async (
+  deviceId: string,
+  nodeGuid: string,
+  data: CreateOpcUaNodeRequest
+): Promise<void> => {
+  await api.put(
+    `/devices/${deviceId}/opcua-nodes/${nodeGuid}`,
+    data
+  );
 };
 
 /**
  * 5️⃣ Delete OPC UA Node
- * DELETE /api/devices/{deviceId}/opcua-nodes/{nodeId}
+ * DELETE /api/devices/{deviceId}/opcua-nodes/{nodeGuid}
  */
 export const deleteOpcUaNode = async (
   deviceId: string,
-  nodeId: string
+  nodeGuid: string
 ): Promise<void> => {
   await api.delete(
-    `/devices/${deviceId}/opcua-nodes/${encodeURIComponent(nodeId)}`
+    `/devices/${deviceId}/opcua-nodes/${nodeGuid}`
   );
 };
 
@@ -123,6 +117,6 @@ export const searchOpcUaNodes = (
   return nodes.filter(
     (n) =>
       n.nodeId.toLowerCase().includes(term) ||
-      (n.displayName || "").toLowerCase().includes(term)
+      (n.signalName || "").toLowerCase().includes(term)
   );
 };

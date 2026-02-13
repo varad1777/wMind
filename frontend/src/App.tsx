@@ -88,7 +88,7 @@ export default function App() {
               <Route path="Asset/Alerts/:assetId" element={<AlertsPage/>} />
               <Route path="/forbidden" element={<ForbiddenRedirect />} />
               <Route path="/gateways" element={<Gateways />} />
-              <Route path="/devices/nodes/:id" element={<AddNodeFrom />} />
+              <Route path="/devices/nodes/:deviceId" element={<AddNodeFrom />} />
 
               
             </Route>
